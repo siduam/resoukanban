@@ -46,7 +46,7 @@ def main():
     print("正在推送到墨水屏...")
     api_headers = {"X-API-Key": API_KEY}
     files = {"images": ("hot.png", open("hot.png", "rb"), "image/png")}
-    data = {"dither": "true", "pageId": "1"} # 自动开启抖动算法，推送到第1页
+    data = {"dither": "true", "pageId": "2"} # 自动开启抖动算法，推送到第1页
     
     res = requests.post(PUSH_URL, headers=api_headers, files=files, data=data)
     print("极趣服务器返回结果:", res.text)
