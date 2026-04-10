@@ -3,7 +3,7 @@ from PIL import Image, ImageDraw, ImageFont
 import os
 
 # 1. 准备你的极趣设备信息（从你的截图里提取的）
-API_KEY = "zt_dcb022e64dce69d2459796c7616b5c10"
+API_KEY = "zt_3e0e73b124fdfab91690c73eeb1e529d"
 MAC_ADDRESS = "20:6E:F1:B4:81:A8"
 PUSH_URL = f"https://cloud.zectrix.com/open/v1/devices/{MAC_ADDRESS}/display/image"
 
