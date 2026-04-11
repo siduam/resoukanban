@@ -25,4 +25,5 @@ jobs:
         env:
           ZECTRIX_API_KEY: ${{ secrets.ZECTRIX_API_KEY }}
           ZECTRIX_MAC: ${{ secrets.ZECTRIX_MAC }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # 加上这一行！GitHub 内部通行证
         run: python main.py
