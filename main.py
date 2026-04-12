@@ -15,7 +15,7 @@ FONT_PATH = "font.ttf"
 try:
     font_huge = ImageFont.truetype(FONT_PATH, 65)   # 月份大字/实时气温
     font_title = ImageFont.truetype(FONT_PATH, 24)  # 标题栏
-    font_item = ImageFont.truetype(FONT_PATH, 18)   # 正文/阳历/建议
+    font_item = ImageFont.truetype(FONT_PATH, 18)   # 正文/阳历/建议/未来天气
     font_small = ImageFont.truetype(FONT_PATH, 14)  # 序号/星期/辅助信息
     font_tiny = ImageFont.truetype(FONT_PATH, 11)   # 农历/细节
     font_48 = ImageFont.truetype(FONT_PATH, 48)     # 当前温度专用
@@ -76,11 +76,9 @@ def get_solar_term(year, month, day):
 
 def get_lunar_or_festival(y, m, d):
     """返回日历下方文字：节气 > 公历节日 > 农历节日 > 农历日期"""
-    # 节气
     term = get_solar_term(y, m, d)
     if term:
         return term
-    # 公历节日
     solar_fests = {
         (1,1):"元旦", (2,14):"情人节", (3,8):"妇女节", (4,1):"愚人节",
         (5,1):"劳动节", (6,1):"儿童节", (7,1):"建党节", (8,1):"建军节",
@@ -88,7 +86,6 @@ def get_lunar_or_festival(y, m, d):
     }
     if (m, d) in solar_fests:
         return solar_fests[(m, d)]
-    # 农历
     try:
         lunar = ZhDate.from_datetime(datetime(y, m, d))
         lm, ld = lunar.lunar_month, lunar.lunar_day
@@ -120,7 +117,7 @@ def push_image(img, page_id):
     except Exception as e:
         print(f"Page {page_id} 推送失败: {e}")
 
-# ================= 页面 1 & 2: 知乎热榜（符号替换） =================
+# ================= 页面 1 & 2: 知乎热榜 =================
 def task_zhihu():
     print("获取知乎热榜...")
     try:
@@ -224,7 +221,7 @@ def kmph_to_wind_scale(kmph):
     elif kmph <= 117: return 11
     else: return 12
 
-# ================= 页面 4: 天气看板（符号优化） =================
+# ================= 页面 4: 天气看板（最终版） =================
 def task_weather_dashboard():
     print("生成 Page 4: 气象仪表盘 (津南)...")
     img = Image.new('1', (400, 300), color=255)
@@ -257,12 +254,11 @@ def task_weather_dashboard():
         draw.text((25, 40), f"{curr_temp}°C", font=font_48, fill=0)
         # 今日高低温度
         draw.text((25, 100), f"{today_low}°/{today_high}°", font=font_item, fill=0)
-        # 天气描述（使用 font_item 避免过长遮挡，同时右移）
-        draw.text((150, 50), f"{weather_text}", font=font_title, fill=0)  # 使用 title 大小，位置稍高
+        # 天气描述（24px）
+        draw.text((150, 50), f"{weather_text}", font=font_title, fill=0)
 
-        # 右侧卡片：缩小宽度，右移
+        # 右侧卡片（缩小宽度，右移）
         draw.rounded_rectangle([(235, 35), (385, 120)], radius=8, outline=0, fill=0)
-        # 内部文字左对齐但卡片内左边距为10px
         draw.text((245, 45), f"湿度: {humidity}%", font=font_small, fill=255)
         draw.text((245, 70), f"风速: {wind_scale}级", font=font_small, fill=255)
         draw.text((245, 95), f"☀️ 紫外线 {uv_index}", font=font_small, fill=255)
@@ -270,40 +266,34 @@ def task_weather_dashboard():
         # 日出日落
         draw.text((25, 135), f"日出 {sunrise}   日落 {sunset}", font=font_small, fill=0)
 
-        # 未来两天预报（去掉标题，完整显示天气描述）
+        # 未来两天预报（字体统一为 font_item 18px）
         draw.line([(20, 160), (380, 160)], fill=0, width=1)
         x_positions = [30, 200]
         for i, day in enumerate(forecasts):
             x = x_positions[i]
-            date_str = day['date'][5:]
+            date_str = day['date'][5:]  # MM-DD
             high = day['maxtempC']
             low = day['mintempC']
-            # 获取完整天气描述（不再截断），使用 font_tiny 显示
-            weather_desc = day['hourly'][4]['lang_zh'][0]['value']
-            # 如果描述超过5个汉字，缩小字体到10px
-            if len(weather_desc) > 5:
-                try:
-                    font_desc = ImageFont.truetype(FONT_PATH, 10)
-                except:
-                    font_desc = font_tiny
-            else:
-                font_desc = font_tiny
+            weather_desc = day['hourly'][4]['lang_zh'][0]['value']  # 完整描述
+            # 日期、天气描述、温度全部使用 font_item (18px)
             draw.text((x, 175), f"{date_str}", font=font_item, fill=0)
-            draw.text((x, 200), f"{weather_desc}", font=font_desc, fill=0)
-            draw.text((x, 220), f"{low}°~{high}°", font=font_small, fill=0)
+            draw.text((x, 200), f"{weather_desc}", font=font_item, fill=0)
+            draw.text((x, 220), f"{low}°~{high}°", font=font_item, fill=0)
 
-        # 穿衣建议（字体增大到18px）
+        # 穿衣建议（下移，使用 font_item 18px）
         advice = get_clothing_advice(curr_temp)
         draw.line([(20, 250), (380, 250)], fill=0, width=1)
-        advice_lines = [advice[i:i+18] for i in range(0, len(advice), 18)]  # 每行18字
+        # 每行18字，自动换行
+        advice_lines = [advice[i:i+18] for i in range(0, len(advice), 18)]
         for i, line in enumerate(advice_lines[:2]):
-            draw.text((20, 258 + i*24), f"[衣] {line}", font=font_item, fill=0)  # 使用 font_item 18px
+            draw.text((20, 272 + i*24), f"[衣] {line}", font=font_item, fill=0)  # 起始 y=272
 
     except Exception as e:
         print(f"天气获取异常: {e}")
         draw.text((20, 50), "天气数据获取失败，请检查网络", font=font_item, fill=0)
 
     push_image(img, 4)
+
 # ================= 主程序 =================
 if __name__ == "__main__":
     if not API_KEY or not MAC_ADDRESS:
