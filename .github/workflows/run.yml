@@ -29,6 +29,7 @@ jobs:
           ZECTRIX_API_KEY: ${{ secrets.ZECTRIX_API_KEY }}
           ZECTRIX_MAC: ${{ secrets.ZECTRIX_MAC }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AMAP_WEATHER_KEY: ${{ secrets.AMAP_WEATHER_KEY }}   # 新增这一行
         run: python main.py
 
     
