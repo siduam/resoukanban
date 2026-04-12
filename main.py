@@ -2,7 +2,7 @@ import os
 import requests
 import calendar
 from PIL import Image, ImageDraw, ImageFont
-from datetime import datetime
+from datetime import datetime, timedelta  # 新增 timedelta
 from zhdate import ZhDate
 
 # ================= 配置区 =================
@@ -216,7 +216,7 @@ def kmph_to_wind_scale(kmph):
     elif kmph <= 117: return 11
     else: return 12
 
-# ================= 页面 4: 天气看板（最终版） =================
+# ================= 页面 4: 天气看板（带更新时间，右侧卡片下移） =================
 def task_weather_dashboard():
     print("生成 Page 4: 气象仪表盘 (津南)...")
     img = Image.new('1', (400, 300), color=255)
@@ -242,8 +242,22 @@ def task_weather_dashboard():
         
         forecasts = resp['weather'][1:3]  # 明天、后天
         
-        # 标题
+        # 获取当前北京时间
+        now_utc = datetime.utcnow()
+        now_beijing = now_utc + timedelta(hours=8)
+        update_time = now_beijing.strftime("%H:%M")
+        
+        # 标题行：左侧地点，右侧更新时间
         draw.text((20, 10), "津南区 | 天大北洋园", font=font_title, fill=0)
+        time_text = f"更新: {update_time}"
+        # 计算文本宽度实现右对齐
+        try:
+            bbox = draw.textbbox((0, 0), time_text, font=font_small)
+            time_width = bbox[2] - bbox[0]
+        except:
+            # 回退：粗略估算（每个字符约8px）
+            time_width = len(time_text) * 8
+        draw.text((390 - time_width, 12), time_text, font=font_small, fill=0)
 
         # 当前温度（48px）
         draw.text((25, 40), f"{curr_temp}°C", font=font_48, fill=0)
@@ -252,16 +266,16 @@ def task_weather_dashboard():
         # 天气描述（36px）
         draw.text((150, 45), f"{weather_text}", font=font_36, fill=0)
 
-        # 右侧卡片（宽度缩小，右移）
-        draw.rounded_rectangle([(235, 35), (385, 120)], radius=8, outline=0, fill=0)
-        draw.text((245, 45), f"[湿] {humidity}%", font=font_small, fill=255)
-        draw.text((245, 70), f"[风] {wind_scale}级", font=font_small, fill=255)
-        draw.text((245, 95), f"☀️ 紫外线 {uv_index}", font=font_small, fill=255)
+        # 右侧卡片（下移10px：原 y=35 -> y=45，内部文字对应下移）
+        draw.rounded_rectangle([(235, 45), (385, 130)], radius=8, outline=0, fill=0)
+        draw.text((245, 55), f"[湿] {humidity}%", font=font_small, fill=255)
+        draw.text((245, 80), f"[风] {wind_scale}级", font=font_small, fill=255)
+        draw.text((245, 105), f"☀️ 紫外线 {uv_index}", font=font_small, fill=255)
 
         # 日出日落（18px）
         draw.text((25, 135), f"日出 {sunrise}   日落 {sunset}", font=font_item, fill=0)
 
-        # 未来两天预报（字体18px）
+        # 未来两天预报
         draw.line([(20, 160), (380, 160)], fill=0, width=1)
         x_positions = [30, 200]
         for i, day in enumerate(forecasts):
@@ -274,7 +288,7 @@ def task_weather_dashboard():
             draw.text((x, 200), f"{weather_desc}", font=font_item, fill=0)
             draw.text((x, 220), f"{low}°~{high}°", font=font_item, fill=0)
 
-        # 穿衣建议（与分隔线间距缩小）
+        # 穿衣建议
         advice = get_clothing_advice(curr_temp)
         draw.line([(20, 250), (380, 250)], fill=0, width=1)
         advice_lines = [advice[i:i+18] for i in range(0, len(advice), 18)]
