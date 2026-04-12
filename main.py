@@ -248,8 +248,7 @@ def task_weather_dashboard():
         today_high = today_weather['maxtempC']
         today_low = today_weather['mintempC']
         
-        # 未来两天：明天、后天
-        forecasts = resp['weather'][1:3]
+        forecasts = resp['weather'][1:3]  # 明天、后天
         
         # 标题
         draw.text((20, 10), "津南区 | 天大北洋园", font=font_title, fill=0)
@@ -258,19 +257,20 @@ def task_weather_dashboard():
         draw.text((25, 40), f"{curr_temp}°C", font=font_48, fill=0)
         # 今日高低温度
         draw.text((25, 100), f"{today_low}°/{today_high}°", font=font_item, fill=0)
-        # 天气描述（48px，右移）
-        draw.text((150, 40), f"{weather_text}", font=font_48, fill=0)
+        # 天气描述（使用 font_item 避免过长遮挡，同时右移）
+        draw.text((150, 50), f"{weather_text}", font=font_title, fill=0)  # 使用 title 大小，位置稍高
 
-        # 右侧卡片（符号替换为文字）
-        draw.rounded_rectangle([(210, 35), (390, 120)], radius=8, outline=0, fill=0)
-        draw.text((220, 45), f"湿度: {humidity}%", font=font_small, fill=255)
-        draw.text((220, 70), f"风速: {wind_scale}级", font=font_small, fill=255)
-        draw.text((220, 95), f"☀️ 紫外线 {uv_index}", font=font_small, fill=255)  # ☀️可显示
+        # 右侧卡片：缩小宽度，右移
+        draw.rounded_rectangle([(235, 35), (385, 120)], radius=8, outline=0, fill=0)
+        # 内部文字左对齐但卡片内左边距为10px
+        draw.text((245, 45), f"湿度: {humidity}%", font=font_small, fill=255)
+        draw.text((245, 70), f"风速: {wind_scale}级", font=font_small, fill=255)
+        draw.text((245, 95), f"☀️ 紫外线 {uv_index}", font=font_small, fill=255)
 
-        # 日出日落（文字替换符号）
+        # 日出日落
         draw.text((25, 135), f"日出 {sunrise}   日落 {sunset}", font=font_small, fill=0)
 
-        # 未来两天预报（无标题）
+        # 未来两天预报（去掉标题，完整显示天气描述）
         draw.line([(20, 160), (380, 160)], fill=0, width=1)
         x_positions = [30, 200]
         for i, day in enumerate(forecasts):
@@ -278,24 +278,32 @@ def task_weather_dashboard():
             date_str = day['date'][5:]
             high = day['maxtempC']
             low = day['mintempC']
-            weather_desc = day['hourly'][4]['lang_zh'][0]['value'][:3]
+            # 获取完整天气描述（不再截断），使用 font_tiny 显示
+            weather_desc = day['hourly'][4]['lang_zh'][0]['value']
+            # 如果描述超过5个汉字，缩小字体到10px
+            if len(weather_desc) > 5:
+                try:
+                    font_desc = ImageFont.truetype(FONT_PATH, 10)
+                except:
+                    font_desc = font_tiny
+            else:
+                font_desc = font_tiny
             draw.text((x, 175), f"{date_str}", font=font_item, fill=0)
-            draw.text((x, 200), f"{weather_desc}", font=font_small, fill=0)
+            draw.text((x, 200), f"{weather_desc}", font=font_desc, fill=0)
             draw.text((x, 220), f"{low}°~{high}°", font=font_small, fill=0)
 
-        # 穿衣建议（符号 [衣]）
+        # 穿衣建议（字体增大到18px）
         advice = get_clothing_advice(curr_temp)
         draw.line([(20, 250), (380, 250)], fill=0, width=1)
-        advice_lines = [advice[i:i+19] for i in range(0, len(advice), 19)]
+        advice_lines = [advice[i:i+18] for i in range(0, len(advice), 18)]  # 每行18字
         for i, line in enumerate(advice_lines[:2]):
-            draw.text((20, 258 + i*22), f"[衣] {line}", font=font_small, fill=0)
+            draw.text((20, 258 + i*24), f"[衣] {line}", font=font_item, fill=0)  # 使用 font_item 18px
 
     except Exception as e:
         print(f"天气获取异常: {e}")
         draw.text((20, 50), "天气数据获取失败，请检查网络", font=font_item, fill=0)
 
     push_image(img, 4)
-
 # ================= 主程序 =================
 if __name__ == "__main__":
     if not API_KEY or not MAC_ADDRESS:
