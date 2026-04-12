@@ -216,6 +216,22 @@ def task_calendar():
     push_image(img, 3)
 
 # ================= 页面 4: 气象仪表盘（优化布局，内容更丰富） =================
+def kmph_to_wind_scale(kmph):
+    """将风速(km/h)转换为风级（0-12级）"""
+    if kmph < 1: return 0
+    elif kmph <= 5: return 1
+    elif kmph <= 11: return 2
+    elif kmph <= 19: return 3
+    elif kmph <= 28: return 4
+    elif kmph <= 38: return 5
+    elif kmph <= 49: return 6
+    elif kmph <= 61: return 7
+    elif kmph <= 74: return 8
+    elif kmph <= 88: return 9
+    elif kmph <= 102: return 10
+    elif kmph <= 117: return 11
+    else: return 12
+
 def task_weather_dashboard():
     print("生成 Page 4: 气象仪表盘 (津南)...")
     img = Image.new('1', (400, 300), color=255)
@@ -228,63 +244,65 @@ def task_weather_dashboard():
         curr = resp['current_condition'][0]
         curr_temp = int(curr['temp_C'])
         weather_text = curr['lang_zh'][0]['value']
-        humidity = curr['humidity']          # 湿度
-        wind_speed = curr['windspeedKmph']   # 风速 km/h
+        humidity = curr['humidity']
+        wind_kmph = int(curr['windspeedKmph'])
+        wind_scale = kmph_to_wind_scale(wind_kmph)
         uv_index = curr.get('uvIndex', 'N/A')
-        # 日出日落时间（从 weather 数组第一天的 astronomy 获取）
         astro = resp['weather'][0]['astronomy'][0]
         sunrise = astro['sunrise']
         sunset = astro['sunset']
-
-        # 未来三天预报
         forecasts = resp['weather'][1:4]  # 明天、后天、大后天
 
-        # ----- 布局设计 -----
-        # 上半部分：主要天气信息（左侧实时温度+天气，右侧指标卡片）
-        # 左上角标题
+        # ----- 布局坐标 -----
+        # 标题
         draw.text((20, 10), "津南区 | 天大北洋园", font=font_title, fill=0)
 
         # 实时温度大数字
-        draw.text((25, 45), f"{curr_temp}°C", font=font_huge, fill=0)
+        draw.text((25, 40), f"{curr_temp}°C", font=font_huge, fill=0)
         # 天气描述
-        draw.text((25, 110), f"{weather_text}", font=font_item, fill=0)
+        draw.text((25, 95), f"{weather_text}", font=font_item, fill=0)
 
-        # 右侧指标区域（湿度、风速、紫外线）
-        draw.rounded_rectangle([(210, 40), (390, 95)], radius=8, outline=0, fill=0)
-        draw.text((220, 45), "💧 湿度", font=font_small, fill=255)
-        draw.text((220, 65), f"{humidity}%", font=font_item, fill=255)
-        draw.text((300, 45), "🌬️ 风速", font=font_small, fill=255)
-        draw.text((300, 65), f"{wind_speed} km/h", font=font_item, fill=255)
-        draw.text((260, 85), f"☀️ 紫外线 {uv_index}", font=font_small, fill=255)
+        # 右侧信息卡片（扩大尺寸）
+        draw.rounded_rectangle([(210, 35), (390, 120)], radius=8, outline=0, fill=0)
+        # 湿度
+        draw.text((220, 45), f"💧 湿度 {humidity}%", font=font_small, fill=255)
+        # 风速（显示级数）
+        draw.text((220, 70), f"🌬️ 风速 {wind_scale}级", font=font_small, fill=255)
+        # 紫外线
+        draw.text((220, 95), f"☀️ 紫外线 {uv_index}", font=font_small, fill=255)
 
-        # 日出日落信息
-        draw.text((25, 140), f"🌅 日出 {sunrise}   🌇 日落 {sunset}", font=font_small, fill=0)
+        # 日出日落
+        draw.text((25, 135), f"🌅 日出 {sunrise}   🌇 日落 {sunset}", font=font_small, fill=0)
 
-        # 未来三天预报（紧凑横排）
-        draw.line([(20, 165), (380, 165)], fill=0, width=1)
-        draw.text((20, 175), "未来三天", font=font_small, fill=0)
+        # 未来三天预报（横向均匀分布）
+        draw.line([(20, 160), (380, 160)], fill=0, width=1)
+        draw.text((20, 168), "未来三天", font=font_small, fill=0)
+        # 三天坐标：x = 30, 145, 260
+        x_positions = [30, 145, 260]
         for i, day in enumerate(forecasts):
-            x = 30 + i * 120
+            x = x_positions[i]
             date_str = day['date'][5:]  # MM-DD
             high = day['maxtempC']
             low = day['mintempC']
-            # 取中午12点的天气描述
+            # 取中午12点的天气描述（3个汉字以内）
             weather_desc = day['hourly'][4]['lang_zh'][0]['value'][:3]
-            draw.text((x, 195), f"{date_str}", font=font_small, fill=0)
-            draw.text((x, 215), f"{weather_desc}", font=font_tiny, fill=0)
-            draw.text((x, 235), f"{low}°~{high}°", font=font_tiny, fill=0)
+            draw.text((x, 185), f"{date_str}", font=font_small, fill=0)
+            draw.text((x, 205), f"{weather_desc}", font=font_tiny, fill=0)
+            draw.text((x, 220), f"{low}°~{high}°", font=font_tiny, fill=0)
 
-        # 穿衣建议
+        # 穿衣建议（下移）
         advice = get_clothing_advice(curr_temp)
-        draw.line([(20, 255), (380, 255)], fill=0, width=1)
-        draw.text((20, 265), f"👕 {advice}", font=font_tiny, fill=0)
+        draw.line([(20, 245), (380, 245)], fill=0, width=1)
+        # 自动换行处理（最多两行，每行19字）
+        advice_lines = [advice[i:i+19] for i in range(0, len(advice), 19)]
+        for i, line in enumerate(advice_lines[:2]):
+            draw.text((20, 255 + i*18), f"👕 {line}", font=font_tiny, fill=0)
 
     except Exception as e:
         print(f"天气获取异常: {e}")
         draw.text((20, 50), "天气数据获取失败，请检查网络", font=font_item, fill=0)
 
     push_image(img, 4)
-
 # ================= 主程序 =================
 if __name__ == "__main__":
     if not API_KEY or not MAC_ADDRESS:
