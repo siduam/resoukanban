@@ -13,7 +13,6 @@
 | Page 3 | 阳历日历 + 农历/节气/节日 |
 | Page 4 | 综合看板（天气、日出日落、未来两天预报、穿衣建议、每日一言） |
 
-
 <img src="./images/zhihu.jpg" width="40%">
 <img src="./images/calendar.jpg" width="40%">
 <img src="./images/weather.jpg" width="40%">
@@ -22,9 +21,9 @@
 
 - 📱 **知乎热榜** – 自动抓取知乎实时热度前20条，自动分两页显示
 - 📅 **农历日历** – 阳历日期下方显示农历、节气、公历节日、传统节日（如春节、清明、端午等）
-- 🌤️ **天气看板** – 使用 `wttr.in` 免费接口，无需 API Key，全球可用  
+- 🌤️ **天气看板** – 混合数据源：**高德天气**提供实时温湿度、风力风向，**wttr.in** 提供未来两天预报、日出日落  
   - 实时温度、今日高低温度、天气描述  
-  - 湿度、风速（级）、紫外线指数  
+  - 湿度、风力（级）+ 风向、体感温度（计算）  
   - 日出日落时间  
   - 未来两天预报（日期、天气、温度）  
   - 基于实时温度的穿衣建议  
@@ -36,7 +35,11 @@
 1. **一个 GitHub 账号** – 用于 Fork 仓库和设置 Actions。
 2. **极趣墨水屏** – 已接入极趣云，并记下设备的 MAC 地址。
 3. **极趣云 API Key** – 登录 [极趣云控制台](https://cloud.zectrix.com) 获取。
-4. **中文字体文件** – 推荐使用 `Noto Sans CJK SC` 或任意支持中文的 `.ttf` 字体，并重命名为 `font.ttf`。
+4. **高德地图 API Key** – 用于获取实时天气数据（免费，每日30万次）。  
+   - 访问 [高德开放平台](https://lbs.amap.com/)，注册账号  
+   - 进入 **控制台** → **应用管理** → **创建应用** → 添加 Key，服务平台选择 **Web服务**  
+   - 确保 Key 已开启 **“天气查询”** 服务  
+5. **中文字体文件** – 推荐使用 `Noto Sans CJK SC` 或任意支持中文的 `.ttf` 字体，并重命名为 `font.ttf`。
 
 ## 🚀 快速开始
 
@@ -54,12 +57,13 @@
 
 ### 3. 配置 Secrets（敏感信息）
 
-在 GitHub 仓库页面进入 **Settings** → **Secrets and variables** → **Actions**，点击 **New repository secret**，添加以下两个变量：
+在 GitHub 仓库页面进入 **Settings** → **Secrets and variables** → **Actions**，点击 **New repository secret**，添加以下三个变量：
 
 | Secret 名称 | 说明 |
 |------------|------|
-| `ZECTRIX_API_KEY` | 你的极趣云 API Key（登录极趣云控制台获取） |
+| `ZECTRIX_API_KEY` | 你的极趣云 API Key |
 | `ZECTRIX_MAC` | 你的墨水屏 MAC 地址（格式如 `AA:BB:CC:DD:EE:FF`） |
+| `AMAP_WEATHER_KEY` | 高德地图 Web 服务 API Key（用于获取实时天气） |
 
 ### 4. （可选）修改推送频率
 
@@ -83,18 +87,10 @@
 
 默认天气地点为 **津南区（天津）**。如果你想切换到其他城市，请按以下步骤操作：
 
-1. 在 GitHub 仓库中找到 `main.py` 文件，点击进入。
-2. 点击右上角的 ✏️ 铅笔图标，编辑文件。
-3. 找到 `task_weather_dashboard()` 函数中的这一行：
-
+1. 在 GitHub 仓库中找到 `main.py` 文件，点击进入编辑。
+2. 修改 **高德城市代码**（第 24 行左右）：
    ```python
-   url = "https://wttr.in/Jinnan,Tianjin?format=j1&lang=zh"
-4. 将 Jinnan,Tianjin 替换为你所在城市的英文名称（拼音），例如：
-   
-   北京：Beijing
-   
-   上海：Shanghai
-
+   ADCODE = "120112"   # 替换为你的城市 adcode（例如北京 110000）
 
 ### 调整布局坐标
 
