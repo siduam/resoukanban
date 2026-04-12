@@ -3,7 +3,7 @@
 这是一个开源的 Python 脚本，利用 GitHub Actions 自动为极趣墨水屏推送每日看板信息。  
 它借鉴了 NewsNow 的简洁风格，为你提供实时热点、农历日历和天气信息，无需任何服务器，完全免费。
 
-<img src="./images/preview.png" width="40%">
+<img src="./images/preview.jpg" width="40%">
 
 ## 📸 效果预览
 
