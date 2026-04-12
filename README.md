@@ -92,7 +92,6 @@
 ## 🙏 致谢
 
 - 天气数据： [wttr.in](https://wttr.in)
-- 每日一言： [hitokoto.cn](https://hitokoto.cn)
 - 知乎热榜：知乎官方 API
 - 农历转换： [zhdate](https://github.com/CutePandaSh/zhdate)
 - 极趣云：提供墨水屏推送服务
