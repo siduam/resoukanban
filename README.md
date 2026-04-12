@@ -3,9 +3,7 @@
 这是一个开源的 Python 脚本，利用 GitHub Actions 自动为极趣墨水屏推送每日看板信息。  
 它借鉴了 NewsNow 的简洁风格，为你提供实时热点、农历日历和天气信息，无需任何服务器，完全免费。
 
-<div align="center">
-  <img src="./images/preview.jpg" width="30%">
-</div>
+<img src="./images/preview.png" width="40%">
 
 ## 📸 效果预览
 
@@ -15,12 +13,10 @@
 | Page 3 | 阳历日历 + 农历/节气/节日 |
 | Page 4 | 综合看板（天气、日出日落、未来两天预报、穿衣建议、每日一言） |
 
-<div align="center">
-  <img src="./images/zhihu.jpg" width="30%"><br>
-  <img src="./images/calendar.jpg" width="30%"><br>
-  <img src="./images/weather.jpg" width="30%">
-</div>
 
+<img src="./images/zhihu.jpg" width="40%">
+<img src="./images/calendar.jpg" width="40%">
+<img src="./images/weather.jpg" width="40%">
 ## ✨ 功能特点
 
 - 📱 **知乎热榜** – 自动抓取知乎实时热度前20条，自动分两页显示
