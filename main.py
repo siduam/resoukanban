@@ -163,7 +163,6 @@ def task_calendar():
     print("生成 Page 3: 日历...")
     img = Image.new('1', (400, 300), color=255)
     draw = ImageDraw.Draw(img)
-    # 使用北京时间
     now_utc = datetime.utcnow()
     now = now_utc + timedelta(hours=8)
     y, m, today = now.year, now.month, now.day
@@ -198,9 +197,9 @@ def task_calendar():
         curr_y += row_h
     push_image(img, 3)
 
-# ================= 混合天气获取（津南区，完整描述） =================
+# ================= 混合天气获取（高德实时+高德预报，wttr.in 日出日落） =================
 def get_hybrid_weather():
-    """高德实时 + wttr.in预报，专为津南区配置"""
+    """高德实时(base) + 高德预报(all) + wttr.in 日出日落"""
     result = {
         "city": "津南区",
         "weather": "未知",
@@ -215,113 +214,101 @@ def get_hybrid_weather():
         "forecasts": []
     }
     
-    # 高德实时数据
-    amap_success = False
-    if AMAP_KEY:
-        try:
-            amap_url = f"https://restapi.amap.com/v3/weather/weatherInfo?city={ADCODE}&key={AMAP_KEY}&extensions=base"
-            print(f"请求高德 API: {amap_url}")
-            amap_resp = requests.get(amap_url, timeout=10).json()
-            if amap_resp.get("status") == "1" and amap_resp.get("lives"):
-                live = amap_resp["lives"][0]
-                result["city"] = live.get("city", "津南区")
-                result["weather"] = live.get("weather", "未知")
-                result["temp_curr"] = int(live.get("temperature", 0))
-                result["humidity"] = live.get("humidity", "0") + "%"
-                wind_power_raw = live.get("windpower", "0")
-                wind_direction = live.get("winddirection", "")
-                wind_num = re.search(r'\d+', wind_power_raw)
-                wind_power = wind_num.group(0) if wind_num else "0"
-                result["wind_info"] = f"{wind_power}级 {wind_direction}"
-                # 计算体感温度
-                try:
-                    wind_speed = int(wind_power)
-                    if wind_speed <= 1:
-                        wind_kmh = 2
-                    elif wind_speed == 2:
-                        wind_kmh = 8
-                    else:
-                        wind_kmh = 15 + (wind_speed - 3) * 7
-                    feel_temp = result["temp_curr"] - (wind_kmh / 15) if wind_kmh > 5 else result["temp_curr"]
-                    humidity_val = int(live.get("humidity", 50))
-                    if humidity_val > 70:
-                        feel_temp -= 1
-                    result["feel_temp"] = f"{round(feel_temp, 1)}°C"
-                except:
-                    result["feel_temp"] = f"{result['temp_curr']}°C"
-                amap_success = True
-                print("✅ 高德 API 调用成功，获取到实时数据")
-            else:
-                print(f"⚠️ 高德 API 返回状态异常: {amap_resp.get('status')}, infocode: {amap_resp.get('infocode')}")
-        except Exception as e:
-            print(f"❌ 高德 API 请求异常: {e}")
-    else:
-        print("⚠️ 未设置 AMAP_WEATHER_KEY，跳过高德 API")
-    
-    # wttr.in 预报和日出日落
+    if not AMAP_KEY:
+        print("⚠️ 未设置 AMAP_WEATHER_KEY，无法获取高德数据")
+        return result
+
+    # ---------- 1. 高德实时数据 (extensions=base) ----------
+    try:
+        base_url = f"https://restapi.amap.com/v3/weather/weatherInfo?city={ADCODE}&key={AMAP_KEY}&extensions=base"
+        print(f"请求高德实时 API: {base_url}")
+        base_resp = requests.get(base_url, timeout=10).json()
+        if base_resp.get("status") == "1" and base_resp.get("lives"):
+            live = base_resp["lives"][0]
+            result["city"] = live.get("city", "津南区")
+            result["weather"] = live.get("weather", "未知")
+            result["temp_curr"] = int(live.get("temperature", 0))
+            result["humidity"] = live.get("humidity", "0") + "%"
+            wind_power_raw = live.get("windpower", "0")
+            wind_direction = live.get("winddirection", "")
+            wind_num = re.search(r'\d+', wind_power_raw)
+            wind_power = wind_num.group(0) if wind_num else "0"
+            result["wind_info"] = f"{wind_power}级 {wind_direction}"
+            # 计算体感温度
+            try:
+                wind_speed = int(wind_power)
+                if wind_speed <= 1:
+                    wind_kmh = 2
+                elif wind_speed == 2:
+                    wind_kmh = 8
+                else:
+                    wind_kmh = 15 + (wind_speed - 3) * 7
+                feel_temp = result["temp_curr"] - (wind_kmh / 15) if wind_kmh > 5 else result["temp_curr"]
+                humidity_val = int(live.get("humidity", 50))
+                if humidity_val > 70:
+                    feel_temp -= 1
+                result["feel_temp"] = f"{round(feel_temp, 1)}°C"
+            except:
+                result["feel_temp"] = f"{result['temp_curr']}°C"
+            print("✅ 高德实时数据获取成功")
+        else:
+            print(f"⚠️ 高德实时 API 返回异常: {base_resp.get('status')}")
+    except Exception as e:
+        print(f"❌ 高德实时请求异常: {e}")
+
+    # ---------- 2. 高德预报数据 (extensions=all) ----------
+    try:
+        all_url = f"https://restapi.amap.com/v3/weather/weatherInfo?city={ADCODE}&key={AMAP_KEY}&extensions=all"
+        print(f"请求高德预报 API: {all_url}")
+        all_resp = requests.get(all_url, timeout=10).json()
+        if all_resp.get("status") == "1" and all_resp.get("forecasts"):
+            forecast = all_resp["forecasts"][0]
+            casts = forecast.get("casts", [])
+            if len(casts) >= 1:
+                today_cast = casts[0]
+                result["temp_low"] = int(today_cast.get("nighttemp", 0))
+                result["temp_high"] = int(today_cast.get("daytemp", 0))
+            # 未来两天预报（索引1=明天，索引2=后天）
+            for idx in [1, 2]:
+                if idx < len(casts):
+                    day = casts[idx]
+                    # 天气描述使用白天天气
+                    weather_desc = day.get("dayweather", "未知")
+                    result["forecasts"].append({
+                        "date": day.get("date", "")[5:],
+                        "weather": weather_desc,
+                        "temp_low": int(day.get("nighttemp", 0)),
+                        "temp_high": int(day.get("daytemp", 0))
+                    })
+            print("✅ 高德预报数据获取成功")
+        else:
+            print(f"⚠️ 高德预报 API 返回异常: {all_resp.get('status')}")
+    except Exception as e:
+        print(f"❌ 高德预报请求异常: {e}")
+
+    # ---------- 3. wttr.in 日出日落 ----------
     try:
         wttr_url = "https://wttr.in/Jinnan,Tianjin?format=j1&lang=zh"
-        print(f"请求 wttr.in: {wttr_url}")
+        print(f"请求 wttr.in 天文数据: {wttr_url}")
         wttr_resp = requests.get(wttr_url, timeout=15).json()
-        
-        if not amap_success:
-            curr = wttr_resp['current_condition'][0]
-            result["temp_curr"] = int(curr['temp_C'])
-            result["weather"] = curr['lang_zh'][0]['value']
-            result["humidity"] = curr['humidity'] + '%'
-            wind_kmph = int(curr['windspeedKmph'])
-            wind_dir = curr['winddir16Point']
-            # 风速转等级
-            if wind_kmph < 1: wp = 0
-            elif wind_kmph <= 5: wp = 1
-            elif wind_kmph <= 11: wp = 2
-            elif wind_kmph <= 19: wp = 3
-            elif wind_kmph <= 28: wp = 4
-            elif wind_kmph <= 38: wp = 5
-            elif wind_kmph <= 49: wp = 6
-            elif wind_kmph <= 61: wp = 7
-            elif wind_kmph <= 74: wp = 8
-            elif wind_kmph <= 88: wp = 9
-            elif wind_kmph <= 102: wp = 10
-            elif wind_kmph <= 117: wp = 11
-            else: wp = 12
-            result["wind_info"] = f"{wp}级 {wind_dir}"
-            result["feel_temp"] = curr.get('FeelsLikeC', str(result["temp_curr"])) + '°C'
-            print("⚠️ 高德失败，已使用 wttr.in 后备数据")
-        
-        # 今日高低温
-        today = wttr_resp['weather'][0]
-        result["temp_low"] = int(today['mintempC'])
-        result["temp_high"] = int(today['maxtempC'])
-        
-        # 日出日落
         astro = wttr_resp['weather'][0]['astronomy'][0]
         result["sunrise"] = astro['sunrise']
         result["sunset"] = astro['sunset']
-        
-        # 未来两天预报 - 完整描述，不截断
-        for day in wttr_resp['weather'][1:3]:
-            result["forecasts"].append({
-                "date": day['date'][5:],
-                "weather": day['hourly'][4]['lang_zh'][0]['value'],  # 完整描述
-                "temp_low": day['mintempC'],
-                "temp_high": day['maxtempC']
-            })
-        print("✅ wttr.in 数据获取成功")
+        print("✅ wttr.in 日出日落获取成功")
     except Exception as e:
         print(f"❌ wttr.in 请求异常: {e}")
-    
+
     return result
 
 # ================= 天气看板 =================
 def task_weather_dashboard():
-    print("生成 Page 4: 混合天气看板（津南区）...")
+    print("生成 Page 4: 混合天气看板（高德+高德+wttr.in日出日落）...")
     img = Image.new('1', (400, 300), color=255)
     draw = ImageDraw.Draw(img)
 
     weather = get_hybrid_weather()
     if weather["temp_curr"] == 0 and not weather["forecasts"]:
-        draw.text((20, 50), "天气数据获取失败，请检查网络或API Key", font=font_item, fill=0)
+        draw.text((20, 50), "天气数据获取失败，请检查API Key或网络", font=font_item, fill=0)
         push_image(img, 4)
         return
 
@@ -365,7 +352,6 @@ def task_weather_dashboard():
     for i, day in enumerate(forecasts[:2]):
         x = x_positions[i]
         draw.text((x, 175), day["date"], font=font_item, fill=0)
-        # 使用完整描述，不截断，空间足够，统一用 font_item
         draw.text((x, 200), day["weather"], font=font_item, fill=0)
         draw.text((x, 220), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
 
