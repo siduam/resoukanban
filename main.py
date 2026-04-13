@@ -158,12 +158,14 @@ def task_zhihu():
     draw_list(ImageDraw.Draw(img2), "◆ 知乎热榜 (二)", titles, next_s)
     push_image(img2, 2)
 
-# ================= 日历 =================
+# ================= 日历（北京时间） =================
 def task_calendar():
     print("生成 Page 3: 日历...")
     img = Image.new('1', (400, 300), color=255)
     draw = ImageDraw.Draw(img)
-    now = datetime.now()
+    # 使用北京时间
+    now_utc = datetime.utcnow()
+    now = now_utc + timedelta(hours=8)
     y, m, today = now.year, now.month, now.day
     draw.text((20, 10), str(m), font=font_huge, fill=0)
     draw.text((90, 20), now.strftime("%B"), font=font_title, fill=0)
@@ -196,7 +198,7 @@ def task_calendar():
         curr_y += row_h
     push_image(img, 3)
 
-# ================= 混合天气获取（津南区）=================
+# ================= 混合天气获取（津南区，完整描述） =================
 def get_hybrid_weather():
     """高德实时 + wttr.in预报，专为津南区配置"""
     result = {
@@ -213,7 +215,7 @@ def get_hybrid_weather():
         "forecasts": []
     }
     
-    # ---------- 1. 高德实时数据 ----------
+    # 高德实时数据
     amap_success = False
     if AMAP_KEY:
         try:
@@ -231,7 +233,6 @@ def get_hybrid_weather():
                 wind_num = re.search(r'\d+', wind_power_raw)
                 wind_power = wind_num.group(0) if wind_num else "0"
                 result["wind_info"] = f"{wind_power}级 {wind_direction}"
-                
                 # 计算体感温度
                 try:
                     wind_speed = int(wind_power)
@@ -257,14 +258,13 @@ def get_hybrid_weather():
     else:
         print("⚠️ 未设置 AMAP_WEATHER_KEY，跳过高德 API")
     
-    # ---------- 2. wttr.in 预报和日出日落 ----------
+    # wttr.in 预报和日出日落
     try:
         wttr_url = "https://wttr.in/Jinnan,Tianjin?format=j1&lang=zh"
         print(f"请求 wttr.in: {wttr_url}")
         wttr_resp = requests.get(wttr_url, timeout=15).json()
         
         if not amap_success:
-            # 如果高德失败，从 wttr 获取实时数据作为后备
             curr = wttr_resp['current_condition'][0]
             result["temp_curr"] = int(curr['temp_C'])
             result["weather"] = curr['lang_zh'][0]['value']
@@ -299,11 +299,11 @@ def get_hybrid_weather():
         result["sunrise"] = astro['sunrise']
         result["sunset"] = astro['sunset']
         
-        # 未来两天预报
+        # 未来两天预报 - 完整描述，不截断
         for day in wttr_resp['weather'][1:3]:
             result["forecasts"].append({
                 "date": day['date'][5:],
-                "weather": day['hourly'][4]['lang_zh'][0]['value'][:3],
+                "weather": day['hourly'][4]['lang_zh'][0]['value'],  # 完整描述
                 "temp_low": day['mintempC'],
                 "temp_high": day['maxtempC']
             })
@@ -320,7 +320,6 @@ def task_weather_dashboard():
     draw = ImageDraw.Draw(img)
 
     weather = get_hybrid_weather()
-    # 如果两个数据源都失败且没有预报，显示错误
     if weather["temp_curr"] == 0 and not weather["forecasts"]:
         draw.text((20, 50), "天气数据获取失败，请检查网络或API Key", font=font_item, fill=0)
         push_image(img, 4)
@@ -366,6 +365,7 @@ def task_weather_dashboard():
     for i, day in enumerate(forecasts[:2]):
         x = x_positions[i]
         draw.text((x, 175), day["date"], font=font_item, fill=0)
+        # 使用完整描述，不截断，空间足够，统一用 font_item
         draw.text((x, 200), day["weather"], font=font_item, fill=0)
         draw.text((x, 220), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
 
