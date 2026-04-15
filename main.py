@@ -14,7 +14,7 @@ from zhdate import ZhDate
 ENABLED_PAGES = "1,2,3,4"
 
 # 2. 热搜源设置：支持 'zhihu', 'bilibili', 'github', 'thepaper', 'quote', 'history'
-HOTLIST_SOURCE = "thepaper"  # 在这里修改你想看的热搜源
+HOTLIST_SOURCE = "history"  # 在这里修改你想看的热搜源
 
 # 3. 天气城市设置
 CITY_ADCODE = "120112"                      
