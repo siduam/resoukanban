@@ -6,15 +6,43 @@ from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta
 from zhdate import ZhDate
 
-# ================= 配置区 =================
+# =====================================================================
+# 🌟 第一部分：用户自定义区（想改什么，直接在这里改文字和数字） 🌟
+# =====================================================================
+
+# 1. 控制推送哪几页？
+# 墨水屏共 5 页：1=知乎上, 2=知乎下, 3=日历, 4=天气
+# 如果某天你不想看知乎了，直接改成 "3,4" 即可。
+ENABLED_PAGES = "1,2,3,4"
+
+# 2. 天气城市设置
+# 高德天气城市代码（默认：天津市津南区 120112，北京是 110000）
+CITY_ADCODE = "120112"                      
+
+# 日出日落位置（支持拼音，如 "Beijing" 或 "Haidian,Beijing"）
+WTTR_LOCATION = "Jinnan,Tianjin"            
+
+# 3. 屏幕显示文字
+# 天气页面左上角的自定义标题，你可以改成 "北京市 | 我的温馨小窝" 等等
+CITY_DISPLAY_NAME = "津南区 | 天大北洋园"      
+
+
+# =====================================================================
+# 🔒 第二部分：核心密钥区（⚠️绝对不要改这里，请在 GitHub Secrets 里配置） 🔒
+# =====================================================================
 API_KEY = os.environ.get("ZECTRIX_API_KEY")
 MAC_ADDRESS = os.environ.get("ZECTRIX_MAC")
+AMAP_KEY = os.environ.get("AMAP_WEATHER_KEY")
+
+# 接口地址（自动拼接）
 PUSH_URL = f"https://cloud.zectrix.com/open/v1/devices/{MAC_ADDRESS}/display/image"
 
-# 高德配置（津南区）
-AMAP_KEY = os.environ.get("AMAP_WEATHER_KEY")
-ADCODE = "120112"  # 津南区
 
+# =====================================================================
+# ⚙️ 第三部分：底层运行逻辑（如果没有报错，不需要修改以下代码） ⚙️
+# =====================================================================
+
+# --- 字体设置 ---
 FONT_PATH = "font.ttf"
 try:
     font_huge = ImageFont.truetype(FONT_PATH, 65)
@@ -25,11 +53,12 @@ try:
     font_48 = ImageFont.truetype(FONT_PATH, 48)
     font_36 = ImageFont.truetype(FONT_PATH, 36)
 except:
-    print("错误: 找不到 font.ttf")
+    print("❌ 错误: 找不到 font.ttf")
     exit(1)
 
 HEADERS = {'User-Agent': 'Mozilla/5.0'}
 
+# --- 工具函数 ---
 def get_wrapped_lines(text, max_chars=18):
     lines = []
     while text:
@@ -49,7 +78,22 @@ def get_clothing_advice(temp):
     except:
         return "请根据实际体感气温调整着装。"
 
-# ================= 节气与农历 =================
+def push_image(img, page_id):
+    if str(page_id) not in ENABLED_PAGES:
+        print(f"⏩ Page {page_id} 未启用，跳过推送。")
+        return
+        
+    img.save(f"page_{page_id}.png")
+    api_headers = {"X-API-Key": API_KEY}
+    files = {"images": (f"page_{page_id}.png", open(f"page_{page_id}.png", "rb"), "image/png")}
+    data = {"dither": "true", "pageId": str(page_id)}
+    try:
+        res = requests.post(PUSH_URL, headers=api_headers, files=files, data=data)
+        print(f"✅ Page {page_id} 推送成功: {res.status_code}")
+    except Exception as e:
+        print(f"❌ Page {page_id} 推送失败: {e}")
+
+# --- 节气与农历 ---
 def get_solar_term(year, month, day):
     term_table = {
         (2024,2,4):"立春", (2024,2,19):"雨水", (2024,3,5):"惊蛰", (2024,3,20):"春分",
@@ -77,15 +121,13 @@ def get_solar_term(year, month, day):
 
 def get_lunar_or_festival(y, m, d):
     term = get_solar_term(y, m, d)
-    if term:
-        return term
+    if term: return term
     solar_fests = {
         (1,1):"元旦", (2,14):"情人节", (3,8):"妇女节", (4,1):"愚人节",
         (5,1):"劳动节", (6,1):"儿童节", (7,1):"建党节", (8,1):"建军节",
         (9,10):"教师节", (10,1):"国庆节", (12,25):"圣诞节"
     }
-    if (m, d) in solar_fests:
-        return solar_fests[(m, d)]
+    if (m, d) in solar_fests: return solar_fests[(m, d)]
     try:
         lunar = ZhDate.from_datetime(datetime(y, m, d))
         lm, ld = lunar.lunar_month, lunar.lunar_day
@@ -93,30 +135,17 @@ def get_lunar_or_festival(y, m, d):
             (1,1):"春节", (1,15):"元宵节", (5,5):"端午节",
             (7,7):"七夕节", (8,15):"中秋节", (9,9):"重阳节", (12,30):"除夕"
         }
-        if (lm, ld) in lunar_fests:
-            return lunar_fests[(lm, ld)]
+        if (lm, ld) in lunar_fests: return lunar_fests[(lm, ld)]
         days = ["初一","初二","初三","初四","初五","初六","初七","初八","初九","初十",
                 "十一","十二","十三","十四","十五","十六","十七","十八","十九","二十",
                 "廿一","廿二","廿三","廿四","廿五","廿六","廿七","廿八","廿九","三十"]
         months = ["正月","二月","三月","四月","五月","六月","七月","八月","九月","十月","冬月","腊月"]
-        if ld == 1:
-            return months[lm-1]
+        if ld == 1: return months[lm-1]
         return days[ld-1]
     except:
         return ""
 
-def push_image(img, page_id):
-    img.save(f"page_{page_id}.png")
-    api_headers = {"X-API-Key": API_KEY}
-    files = {"images": (f"page_{page_id}.png", open(f"page_{page_id}.png", "rb"), "image/png")}
-    data = {"dither": "true", "pageId": str(page_id)}
-    try:
-        res = requests.post(PUSH_URL, headers=api_headers, files=files, data=data)
-        print(f"Page {page_id} 推送成功: {res.status_code}")
-    except Exception as e:
-        print(f"Page {page_id} 推送失败: {e}")
-
-# ================= 知乎热榜 =================
+# --- 任务：知乎热榜 ---
 def task_zhihu():
     print("获取知乎热榜...")
     try:
@@ -135,8 +164,7 @@ def task_zhihu():
         for i in range(start_idx, len(items)):
             lines = get_wrapped_lines(items[i], 19)
             required_h = len(lines) * line_height
-            if y + required_h > 295:
-                break
+            if y + required_h > 295: break
             current_num = i + 1
             draw.rounded_rectangle([(10, y), (36, y+24)], radius=6, fill=0)
             num_x = 18 if current_num < 10 else 11
@@ -151,15 +179,24 @@ def task_zhihu():
                 draw.line([(45, y - item_gap/2), (380, y - item_gap/2)], fill=0, width=1)
         return last_idx
 
-    img1 = Image.new('1', (400, 300), color=255)
-    next_s = draw_list(ImageDraw.Draw(img1), "◆ 知乎热榜 (一)", titles, 0)
-    push_image(img1, 1)
-    img2 = Image.new('1', (400, 300), color=255)
-    draw_list(ImageDraw.Draw(img2), "◆ 知乎热榜 (二)", titles, next_s)
-    push_image(img2, 2)
+    # 判断是否推第一页
+    if "1" in ENABLED_PAGES:
+        img1 = Image.new('1', (400, 300), color=255)
+        next_s = draw_list(ImageDraw.Draw(img1), "◆ 知乎热榜 (一)", titles, 0)
+        push_image(img1, 1)
+    else:
+        # 如果不推第1页，但也需要算出 next_s 给第2页用
+        next_s = 7 # 粗略估计一页放7条
 
-# ================= 日历（北京时间） =================
+    # 判断是否推第二页
+    if "2" in ENABLED_PAGES:
+        img2 = Image.new('1', (400, 300), color=255)
+        draw_list(ImageDraw.Draw(img2), "◆ 知乎热榜 (二)", titles, next_s)
+        push_image(img2, 2)
+
+# --- 任务：日历（北京时间） ---
 def task_calendar():
+    if "3" not in ENABLED_PAGES: return
     print("生成 Page 3: 日历...")
     img = Image.new('1', (400, 300), color=255)
     draw = ImageDraw.Draw(img)
@@ -197,35 +234,24 @@ def task_calendar():
         curr_y += row_h
     push_image(img, 3)
 
-# ================= 混合天气获取（高德实时+高德预报，wttr.in 日出日落） =================
+# --- 混合天气获取 ---
 def get_hybrid_weather():
-    """高德实时(base) + 高德预报(all) + wttr.in 日出日落"""
     result = {
-        "city": "津南区",
-        "weather": "未知",
-        "temp_curr": 0,
-        "temp_low": 0,
-        "temp_high": 0,
-        "wind_info": "无数据",
-        "humidity": "0%",
-        "feel_temp": "N/A",
-        "sunrise": "--:--",
-        "sunset": "--:--",
-        "forecasts": []
+        "city": CITY_DISPLAY_NAME.split("|")[0].strip(), "weather": "未知", "temp_curr": 0, 
+        "temp_low": 0, "temp_high": 0, "wind_info": "无数据", "humidity": "0%", 
+        "feel_temp": "N/A", "sunrise": "--:--", "sunset": "--:--", "forecasts": []
     }
     
     if not AMAP_KEY:
         print("⚠️ 未设置 AMAP_WEATHER_KEY，无法获取高德数据")
         return result
 
-    # ---------- 1. 高德实时数据 (extensions=base) ----------
+    # 1. 高德实时
     try:
-        base_url = f"https://restapi.amap.com/v3/weather/weatherInfo?city={ADCODE}&key={AMAP_KEY}&extensions=base"
-        print(f"请求高德实时 API: {base_url}")
+        base_url = f"https://restapi.amap.com/v3/weather/weatherInfo?city={CITY_ADCODE}&key={AMAP_KEY}&extensions=base"
         base_resp = requests.get(base_url, timeout=10).json()
         if base_resp.get("status") == "1" and base_resp.get("lives"):
             live = base_resp["lives"][0]
-            result["city"] = live.get("city", "津南区")
             result["weather"] = live.get("weather", "未知")
             result["temp_curr"] = int(live.get("temperature", 0))
             result["humidity"] = live.get("humidity", "0") + "%"
@@ -237,97 +263,68 @@ def get_hybrid_weather():
             # 计算体感温度
             try:
                 wind_speed = int(wind_power)
-                if wind_speed <= 1:
-                    wind_kmh = 2
-                elif wind_speed == 2:
-                    wind_kmh = 8
-                else:
-                    wind_kmh = 15 + (wind_speed - 3) * 7
+                if wind_speed <= 1: wind_kmh = 2
+                elif wind_speed == 2: wind_kmh = 8
+                else: wind_kmh = 15 + (wind_speed - 3) * 7
                 feel_temp = result["temp_curr"] - (wind_kmh / 15) if wind_kmh > 5 else result["temp_curr"]
-                humidity_val = int(live.get("humidity", 50))
-                if humidity_val > 70:
-                    feel_temp -= 1
+                if int(live.get("humidity", 50)) > 70: feel_temp -= 1
                 result["feel_temp"] = f"{round(feel_temp, 1)}°C"
             except:
                 result["feel_temp"] = f"{result['temp_curr']}°C"
-            print("✅ 高德实时数据获取成功")
-        else:
-            print(f"⚠️ 高德实时 API 返回异常: {base_resp.get('status')}")
     except Exception as e:
         print(f"❌ 高德实时请求异常: {e}")
 
-    # ---------- 2. 高德预报数据 (extensions=all) ----------
+    # 2. 高德预报
     try:
-        all_url = f"https://restapi.amap.com/v3/weather/weatherInfo?city={ADCODE}&key={AMAP_KEY}&extensions=all"
-        print(f"请求高德预报 API: {all_url}")
+        all_url = f"https://restapi.amap.com/v3/weather/weatherInfo?city={CITY_ADCODE}&key={AMAP_KEY}&extensions=all"
         all_resp = requests.get(all_url, timeout=10).json()
         if all_resp.get("status") == "1" and all_resp.get("forecasts"):
-            forecast = all_resp["forecasts"][0]
-            casts = forecast.get("casts", [])
+            casts = all_resp["forecasts"][0].get("casts", [])
             if len(casts) >= 1:
-                today_cast = casts[0]
-                result["temp_low"] = int(today_cast.get("nighttemp", 0))
-                result["temp_high"] = int(today_cast.get("daytemp", 0))
-            # 未来两天预报（索引1=明天，索引2=后天）
+                result["temp_low"] = int(casts[0].get("nighttemp", 0))
+                result["temp_high"] = int(casts[0].get("daytemp", 0))
             for idx in [1, 2]:
                 if idx < len(casts):
                     day = casts[idx]
-                    # 天气描述使用白天天气
-                    weather_desc = day.get("dayweather", "未知")
                     result["forecasts"].append({
                         "date": day.get("date", "")[5:],
-                        "weather": weather_desc,
+                        "weather": day.get("dayweather", "未知"),
                         "temp_low": int(day.get("nighttemp", 0)),
                         "temp_high": int(day.get("daytemp", 0))
                     })
-            print("✅ 高德预报数据获取成功")
-        else:
-            print(f"⚠️ 高德预报 API 返回异常: {all_resp.get('status')}")
     except Exception as e:
         print(f"❌ 高德预报请求异常: {e}")
 
-    # ---------- 3. wttr.in 日出日落 ----------
+    # 3. wttr.in 日出日落
     try:
-        wttr_url = "https://wttr.in/Jinnan,Tianjin?format=j1&lang=zh"
-        print(f"请求 wttr.in 天文数据: {wttr_url}")
+        wttr_url = f"https://wttr.in/{WTTR_LOCATION}?format=j1&lang=zh"
         wttr_resp = requests.get(wttr_url, timeout=15).json()
         astro = wttr_resp['weather'][0]['astronomy'][0]
         result["sunrise"] = astro['sunrise']
         result["sunset"] = astro['sunset']
-        print("✅ wttr.in 日出日落获取成功")
     except Exception as e:
         print(f"❌ wttr.in 请求异常: {e}")
 
     return result
 
-# ================= 天气看板 =================
+# --- 任务：天气看板 ---
 def task_weather_dashboard():
-    print("生成 Page 4: 混合天气看板（高德+高德+wttr.in日出日落）...")
+    if "4" not in ENABLED_PAGES: return
+    print("生成 Page 4: 混合天气看板...")
     img = Image.new('1', (400, 300), color=255)
     draw = ImageDraw.Draw(img)
 
     weather = get_hybrid_weather()
     if weather["temp_curr"] == 0 and not weather["forecasts"]:
-        draw.text((20, 50), "天气数据获取失败，请检查API Key或网络", font=font_item, fill=0)
+        draw.text((20, 50), "天气数据获取失败，请检查 API Key 或网络", font=font_item, fill=0)
         push_image(img, 4)
         return
 
-    city_name = weather["city"]
-    weather_text = weather["weather"]
-    curr_temp = weather["temp_curr"]
-    today_low = weather["temp_low"]
-    today_high = weather["temp_high"]
-    wind_info = weather["wind_info"]
-    humidity = weather["humidity"]
-    feel_temp = weather["feel_temp"]
-    sunrise = weather["sunrise"]
-    sunset = weather["sunset"]
-    forecasts = weather["forecasts"]
-
+    # 这里使用用户自定义的显示文字
+    draw.text((20, 10), CITY_DISPLAY_NAME, font=font_title, fill=0)
+    
     now_beijing = datetime.utcnow() + timedelta(hours=8)
     update_time = now_beijing.strftime("%H:%M")
-
-    draw.text((20, 10), f"{city_name} | 天大北洋园", font=font_title, fill=0)
     time_text = f"更新: {update_time}"
     try:
         bbox = draw.textbbox((0, 0), time_text, font=font_small)
@@ -336,26 +333,26 @@ def task_weather_dashboard():
         time_width = len(time_text) * 8
     draw.text((390 - time_width, 12), time_text, font=font_small, fill=0)
 
-    draw.text((25, 40), f"{curr_temp}°C", font=font_48, fill=0)
-    draw.text((25, 100), f"{today_low}°/{today_high}°", font=font_item, fill=0)
-    draw.text((150, 45), f"{weather_text}", font=font_36, fill=0)
+    draw.text((25, 40), f"{weather['temp_curr']}°C", font=font_48, fill=0)
+    draw.text((25, 100), f"{weather['temp_low']}°/{weather['temp_high']}°", font=font_item, fill=0)
+    draw.text((150, 45), f"{weather['weather']}", font=font_36, fill=0)
 
     draw.rounded_rectangle([(235, 45), (385, 130)], radius=8, outline=0, fill=0)
-    draw.text((245, 45), f"{wind_info}", font=font_small, fill=255)
-    draw.text((245, 70), f"湿度 {humidity}", font=font_small, fill=255)
-    draw.text((245, 95), f"体感 {feel_temp}", font=font_small, fill=255)
+    draw.text((245, 45), f"{weather['wind_info']}", font=font_small, fill=255)
+    draw.text((245, 70), f"湿度 {weather['humidity']}", font=font_small, fill=255)
+    draw.text((245, 95), f"体感 {weather['feel_temp']}", font=font_small, fill=255)
 
-    draw.text((25, 135), f"日出 {sunrise}   日落 {sunset}", font=font_item, fill=0)
+    draw.text((25, 135), f"日出 {weather['sunrise']}   日落 {weather['sunset']}", font=font_item, fill=0)
 
     draw.line([(20, 160), (380, 160)], fill=0, width=1)
     x_positions = [30, 200]
-    for i, day in enumerate(forecasts[:2]):
+    for i, day in enumerate(weather['forecasts'][:2]):
         x = x_positions[i]
         draw.text((x, 175), day["date"], font=font_item, fill=0)
         draw.text((x, 200), day["weather"], font=font_item, fill=0)
         draw.text((x, 220), f"{day['temp_low']}°~{day['temp_high']}°", font=font_item, fill=0)
 
-    advice = get_clothing_advice(curr_temp)
+    advice = get_clothing_advice(weather['temp_curr'])
     draw.line([(20, 250), (380, 250)], fill=0, width=1)
     advice_lines = [advice[i:i+18] for i in range(0, len(advice), 18)]
     for i, line in enumerate(advice_lines[:2]):
@@ -366,9 +363,16 @@ def task_weather_dashboard():
 # ================= 主程序 =================
 if __name__ == "__main__":
     if not API_KEY or not MAC_ADDRESS:
-        print("错误: 请配置 ZECTRIX_API_KEY 和 ZECTRIX_MAC")
+        print("❌ 错误: 请先在 GitHub Secrets 中配置 ZECTRIX_API_KEY 和 ZECTRIX_MAC")
         exit(1)
-    task_zhihu()
+        
+    print("🚀 开始执行墨水屏推送任务...")
+    print(f"📊 当前启用的页面: {ENABLED_PAGES}")
+    
+    if "1" in ENABLED_PAGES or "2" in ENABLED_PAGES:
+        task_zhihu()
+    
     task_calendar()
     task_weather_dashboard()
-    print("所有任务执行完毕！")
+        
+    print("🎉 所有任务执行完毕！")
