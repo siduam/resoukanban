@@ -51,7 +51,7 @@ try:
     font_title = ImageFont.truetype(FONT_PATH, 24)
     font_item = ImageFont.truetype(FONT_PATH, 18)
     font_small = ImageFont.truetype(FONT_PATH, 14)
-    font_hotlist = ImageFont.truetype(FONT_PATH, 16)
+    font_hotlist = ImageFont.truetype(FONT_PATH, 17)
     font_tiny = ImageFont.truetype(FONT_PATH, 11)
     font_48 = ImageFont.truetype(FONT_PATH, 48)
     font_36 = ImageFont.truetype(FONT_PATH, 36)
@@ -177,6 +177,7 @@ def get_hotlist_data(source):
 
 # --- 任务：热搜看板 ---
 # --- 任务：热搜看板 ---
+# --- 任务：热搜看板 ---
 def task_hotlist():
     if "1" not in ENABLED_PAGES and "2" not in ENABLED_PAGES:
         return
@@ -189,29 +190,29 @@ def task_hotlist():
         draw.rounded_rectangle([(10, 10), (390, 45)], radius=8, fill=0)
         draw.text((20, 15), page_title, font=font_title, fill=255)
         y, last_idx = 55, start_idx
-        item_gap = 10       # 🔧调整：条目之间的间距从 12 缩小到 10
-        line_height = 20    # 🔧调整：每行文字的高度从 22 缩小到 20
+        item_gap = 10       
+        line_height = 21    # 🔧适配17号字：行高设为 21
         
         for i in range(start_idx, len(items)):
-            lines = get_wrapped_lines(items[i], 21) # 🔧调整：字变小了，每行容纳字数从 19 提升到 21
+            lines = get_wrapped_lines(items[i], 20) # 🔧适配17号字：每行容纳字数设为 20
             required_h = len(lines) * line_height
             if y + required_h > 295: break
             current_num = i + 1
             
-            # 🔧调整：左侧的黑色小序号框微调，适配新高度
-            draw.rounded_rectangle([(10, y), (34, y+20)], radius=5, fill=0)
-            num_x = 15 if current_num < 10 else 9
-            draw.text((num_x, y+2), str(current_num), font=font_small, fill=255)
+            # 🔧适配17号字：左侧序号黑框高度设为 22
+            draw.rounded_rectangle([(10, y), (35, y+22)], radius=5, fill=0)
+            num_x = 16 if current_num < 10 else 10
+            draw.text((num_x, y+3), str(current_num), font=font_small, fill=255)
             
             curr_y = y + 1
             for line in lines:
-                # 🔧调整：使用新定义的 font_hotlist (16号) 字体
-                draw.text((42, curr_y), line, font=font_hotlist, fill=0)
+                # 使用 17号字体
+                draw.text((43, curr_y), line, font=font_hotlist, fill=0)
                 curr_y += line_height
-            y += max(20, required_h) + item_gap
+            y += max(22, required_h) + item_gap
             last_idx = i + 1
             if y < 290:
-                draw.line([(42, y - item_gap/2), (380, y - item_gap/2)], fill=0, width=1)
+                draw.line([(43, y - item_gap/2), (380, y - item_gap/2)], fill=0, width=1)
         return last_idx
 
     next_s = 0
@@ -224,7 +225,7 @@ def task_hotlist():
     if "2" in ENABLED_PAGES:
         print("生成 Page 2: 热搜 (下)...")
         img2 = Image.new('1', (400, 300), color=255)
-        # 如果第一页关闭了，就强制从第 8 条开始显示（之前是第 7 条）
+        # 如果第一页关闭了，兜底从第 8 条开始
         start_index = next_s if "1" in ENABLED_PAGES else 8
         draw_list(ImageDraw.Draw(img2), f"◆ {title_display} (二)", titles, start_index)
         push_image(img2, 2)
