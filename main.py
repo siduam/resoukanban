@@ -174,9 +174,7 @@ def get_hotlist_data(source):
         titles = ["数据获取失败，请检查配置"] * 10
     return titles[:20]
 
-# --- 任务：热搜看板 ---
-# --- 任务：热搜看板 ---
-# --- 任务：热搜看板 ---
+
 # --- 任务：热搜看板 ---
 def task_hotlist():
     if "1" not in ENABLED_PAGES and "2" not in ENABLED_PAGES:
@@ -247,13 +245,15 @@ def task_hotlist():
     next_s = 0
     if "1" in ENABLED_PAGES:
         print("生成 Page 1: 热搜 (上)...")
-        img1 = Image.new('1', (400, 300), color=255)
+        # 🔧修改点 1：将 '1' 改为 'L'
+        img1 = Image.new('L', (400, 300), color=255)
         next_s = draw_list(ImageDraw.Draw(img1), f"◆ {title_display} (一)", titles, 0)
         push_image(img1, 1)
 
     if "2" in ENABLED_PAGES:
         print("生成 Page 2: 热搜 (下)...")
-        img2 = Image.new('1', (400, 300), color=255)
+        # 🔧修改点 2：将 '1' 改为 'L'
+        img2 = Image.new('L', (400, 300), color=255)
         start_index = next_s if "1" in ENABLED_PAGES else 7
         draw_list(ImageDraw.Draw(img2), f"◆ {title_display} (二)", titles, start_index)
         push_image(img2, 2)
@@ -262,7 +262,8 @@ def task_hotlist():
 def task_calendar():
     if "3" not in ENABLED_PAGES: return
     print("生成 Page 3: 日历...")
-    img = Image.new('1', (400, 300), color=255)
+    # 🔧修改点 3：将 '1' 改为 'L'
+    img = Image.new('L', (400, 300), color=255)
     draw = ImageDraw.Draw(img)
     now_utc = datetime.utcnow()
     now = now_utc + timedelta(hours=8)
@@ -371,11 +372,12 @@ def get_hybrid_weather():
 
     return result
 
-# --- 任务：天气看板（保持不变） ---
+# --- 任务：天气看板 ---
 def task_weather_dashboard():
     if "4" not in ENABLED_PAGES: return
     print("生成 Page 4: 混合天气看板...")
-    img = Image.new('1', (400, 300), color=255)
+    # 🔧修改点 4：将 '1' 改为 'L'
+    img = Image.new('L', (400, 300), color=255)
     draw = ImageDraw.Draw(img)
 
     weather = get_hybrid_weather()
@@ -401,9 +403,11 @@ def task_weather_dashboard():
     draw.text((150, 45), f"{weather['weather']}", font=font_36, fill=0)
 
     draw.rounded_rectangle([(235, 45), (385, 130)], radius=8, outline=0, fill=0)
-    draw.text((245, 45), f"{weather['wind_info']}", font=font_small, fill=255)
-    draw.text((245, 70), f"湿度 {weather['humidity']}", font=font_small, fill=255)
-    draw.text((245, 95), f"体感 {weather['feel_temp']}", font=font_small, fill=255)
+    
+    # 🔧修改点 5：调整右侧黑框内文字位置使其居中 (X 从 245 移到 255，Y 轴均匀排开)
+    draw.text((255, 56), f"{weather['wind_info']}", font=font_small, fill=255)
+    draw.text((255, 80), f"湿度 {weather['humidity']}", font=font_small, fill=255)
+    draw.text((255, 104), f"体感 {weather['feel_temp']}", font=font_small, fill=255)
 
     draw.text((25, 135), f"日出 {weather['sunrise']}   日落 {weather['sunset']}", font=font_item, fill=0)
 
