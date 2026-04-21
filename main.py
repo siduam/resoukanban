@@ -246,14 +246,14 @@ def task_hotlist():
     if "1" in ENABLED_PAGES:
         print("生成 Page 1: 热搜 (上)...")
         # 🔧修改点 1：将 '1' 改为 'L'
-        img1 = Image.new('L', (400, 300), color=255)
+        img1 = Image.new('1', (400, 300), color=255)
         next_s = draw_list(ImageDraw.Draw(img1), f"◆ {title_display} (一)", titles, 0)
         push_image(img1, 1)
 
     if "2" in ENABLED_PAGES:
         print("生成 Page 2: 热搜 (下)...")
         # 🔧修改点 2：将 '1' 改为 'L'
-        img2 = Image.new('L', (400, 300), color=255)
+        img2 = Image.new('1', (400, 300), color=255)
         start_index = next_s if "1" in ENABLED_PAGES else 7
         draw_list(ImageDraw.Draw(img2), f"◆ {title_display} (二)", titles, start_index)
         push_image(img2, 2)
@@ -263,7 +263,7 @@ def task_calendar():
     if "3" not in ENABLED_PAGES: return
     print("生成 Page 3: 日历...")
     # 🔧修改点 3：将 '1' 改为 'L'
-    img = Image.new('L', (400, 300), color=255)
+    img = Image.new('1', (400, 300), color=255)
     draw = ImageDraw.Draw(img)
     now_utc = datetime.utcnow()
     now = now_utc + timedelta(hours=8)
@@ -377,7 +377,7 @@ def task_weather_dashboard():
     if "4" not in ENABLED_PAGES: return
     print("生成 Page 4: 混合天气看板...")
     # 🔧修改点 4：将 '1' 改为 'L'
-    img = Image.new('L', (400, 300), color=255)
+    img = Image.new('1', (400, 300), color=255)
     draw = ImageDraw.Draw(img)
 
     weather = get_hybrid_weather()
