@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import re
 from typing import Any, Dict, List
 from xml.etree import ElementTree
@@ -66,29 +66,18 @@ class Forecast:
 class WeatherData:
     city: str
     weather: str = "未知"
+    update_time: str = "--:--"
     temp_curr: int = 0
     temp_low: int = 0
     temp_high: int = 0
     wind_info: str = "无数据"
     humidity: str = "0%"
     feel_temp: str = "N/A"
+    ultraviolet: str = "暂无"
+    comfort: str = "暂无"
     sunrise: str = "--:--"
     sunset: str = "--:--"
     forecasts: List[Forecast] = field(default_factory=list)
-
-
-def get_clothing_advice(temp: int) -> str:
-    if temp >= 28:
-        return "建议穿短袖、短裤，注意防晒补水。"
-    if temp >= 22:
-        return "体感舒适，建议穿 T 恤配薄长裤。"
-    if temp >= 16:
-        return "建议穿长袖衬衫、卫衣或单层薄外套。"
-    if temp >= 10:
-        return "气温微凉，建议穿夹克、风衣或毛衣。"
-    if temp >= 5:
-        return "建议穿大衣、厚毛衣或薄款羽绒服。"
-    return "天气寒冷，建议穿厚羽绒服，注意防寒。"
 
 
 def _xml_local_name(tag: str) -> str:
@@ -182,8 +171,25 @@ def _wind_direction_name(degrees: Any) -> str:
         direction = float(degrees) % 360
     except (TypeError, ValueError):
         return "未知风向"
-    names = ("北", "东北", "东", "东南", "南", "西南", "西", "西北")
-    return names[int((direction + 22.5) // 45) % len(names)]
+    names = (
+        "北",
+        "北东北",
+        "东北",
+        "东东北",
+        "东",
+        "东东南",
+        "东南",
+        "南东南",
+        "南",
+        "南西南",
+        "西南",
+        "西西南",
+        "西",
+        "西西北",
+        "西北",
+        "北西北",
+    )
+    return names[int((direction + 11.25 - 1e-9) // 22.5) % len(names)]
 
 
 def _beaufort_level(speed_kmh: Any) -> int:
@@ -208,12 +214,29 @@ def parse_caiyun_weather(payload: Dict[str, Any], city: str) -> WeatherData:
     temperatures = daily.get("temperature", [])
     skycons = daily.get("skycon_08h_20h") or daily.get("skycon", [])
     astro = daily.get("astro", [])
+    life_index = realtime.get("life_index") or {}
+    ultraviolet = life_index.get("ultraviolet") or {}
+    comfort = life_index.get("comfort") or {}
+
+    update_time = "--:--"
+    try:
+        server_time = float(payload["server_time"])
+        tzshift = float(payload.get("tzshift", 0))
+        update_time = (
+            datetime.fromtimestamp(server_time, timezone.utc)
+            + timedelta(seconds=tzshift)
+        ).strftime("%H:%M")
+    except (KeyError, TypeError, ValueError, OSError, OverflowError):
+        pass
 
     result = WeatherData(
         city=city,
         weather=_skycon_name(realtime.get("skycon")),
+        update_time=update_time,
         temp_curr=_round_int(realtime.get("temperature")),
         feel_temp=f"{_round_int(realtime.get('apparent_temperature'))}°C",
+        ultraviolet=str(ultraviolet.get("desc") or "暂无"),
+        comfort=str(comfort.get("desc") or "暂无"),
     )
 
     humidity = realtime.get("humidity", 0)
@@ -266,7 +289,6 @@ def get_caiyun_weather(settings: Settings) -> WeatherData:
     location = f"{settings.caiyun_longitude:.6f},{settings.caiyun_latitude:.6f}"
     url = f"{CAIYUN_BASE_URL}/{settings.caiyun_api_token}/{location}/weather"
     params = {
-        "alert": "true",
         "dailysteps": 3,
         "hourlysteps": 24,
         "lang": "zh_CN",

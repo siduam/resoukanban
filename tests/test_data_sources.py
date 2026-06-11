@@ -28,6 +28,8 @@ def make_settings(token="test-token"):
 def make_payload():
     return {
         "status": "ok",
+        "server_time": 1781150700,
+        "tzshift": 28800,
         "result": {
             "realtime": {
                 "temperature": 28.3,
@@ -35,6 +37,10 @@ def make_payload():
                 "humidity": 0.86,
                 "skycon": "CLEAR_DAY",
                 "wind": {"speed": 12.23, "direction": 111.58},
+                "life_index": {
+                    "ultraviolet": {"index": 3, "desc": "弱"},
+                    "comfort": {"index": 0, "desc": "闷热"},
+                },
             },
             "daily": {
                 "temperature": [
@@ -76,10 +82,13 @@ class CaiyunWeatherTests(unittest.TestCase):
 
         self.assertEqual(weather.city, "津南区")
         self.assertEqual(weather.weather, "晴")
+        self.assertEqual(weather.update_time, "12:05")
         self.assertEqual(weather.temp_curr, 28)
         self.assertEqual(weather.feel_temp, "31°C")
         self.assertEqual(weather.humidity, "86%")
-        self.assertEqual(weather.wind_info, "3级 东")
+        self.assertEqual(weather.wind_info, "3级 东东南")
+        self.assertEqual(weather.ultraviolet, "弱")
+        self.assertEqual(weather.comfort, "闷热")
         self.assertEqual((weather.temp_low, weather.temp_high), (17, 30))
         self.assertEqual((weather.sunrise, weather.sunset), ("04:43", "19:38"))
         self.assertEqual(len(weather.forecasts), 2)
@@ -99,6 +108,7 @@ class CaiyunWeatherTests(unittest.TestCase):
         request_url = requests_get.call_args.args[0]
         request_kwargs = requests_get.call_args.kwargs
         self.assertIn("/test-token/117.320000,38.990000/weather", request_url)
+        self.assertNotIn("alert", request_kwargs["params"])
         self.assertEqual(request_kwargs["params"]["dailysteps"], 3)
         self.assertEqual(request_kwargs["params"]["lang"], "zh_CN")
         response.raise_for_status.assert_called_once_with()
@@ -114,8 +124,20 @@ class CaiyunWeatherTests(unittest.TestCase):
         self.assertEqual(_beaufort_level(0.5), 0)
         self.assertEqual(_beaufort_level(12.23), 3)
         self.assertEqual(_wind_direction_name(0), "北")
-        self.assertEqual(_wind_direction_name(111.58), "东")
-        self.assertEqual(_wind_direction_name(112.5), "东南")
+        self.assertEqual(_wind_direction_name(11.25), "北")
+        self.assertEqual(_wind_direction_name(11.26), "北东北")
+        self.assertEqual(_wind_direction_name(111.58), "东东南")
+        self.assertEqual(_wind_direction_name(123.75), "东东南")
+        self.assertEqual(_wind_direction_name(123.76), "东南")
+
+    def test_missing_realtime_life_index_uses_fallback_labels(self):
+        payload = make_payload()
+        payload["result"]["realtime"]["life_index"] = None
+
+        weather = parse_caiyun_weather(payload, "津南区")
+
+        self.assertEqual(weather.ultraviolet, "暂无")
+        self.assertEqual(weather.comfort, "暂无")
 
 
 class FeedTests(unittest.TestCase):

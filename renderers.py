@@ -1,12 +1,11 @@
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 
 from config import Settings
-from data_sources import WeatherData, get_clothing_advice
+from data_sources import WeatherData
 
 
 CANVAS_SIZE = (400, 300)
@@ -165,7 +164,6 @@ def render_weather_dashboard(
     weather: WeatherData,
     settings: Settings,
     fonts: Fonts,
-    now: datetime = None,
 ) -> Image.Image:
     image = new_canvas()
     draw = ScaledDraw(image)
@@ -180,8 +178,7 @@ def render_weather_dashboard(
         return finish_canvas(image)
 
     draw.text((20, 10), settings.city_display_name, font=fonts.title, fill=0)
-    now = now or datetime.utcnow() + timedelta(hours=8)
-    time_text = f"更新: {now.strftime('%H:%M')}"
+    time_text = f"更新: {weather.update_time}"
     time_box = draw.textbbox((0, 0), time_text, font=fonts.small)
     time_width = time_box[2] - time_box[0]
     draw.text((390 - time_width, 12), time_text, font=fonts.small, fill=0)
@@ -218,10 +215,10 @@ def render_weather_dashboard(
             fill=0,
         )
 
-    advice = get_clothing_advice(weather.temp_curr)
     draw.line([(20, 250), (380, 250)], fill=0)
-    advice_lines = [advice[index:index + 18] for index in range(0, len(advice), 18)]
-    for index, line in enumerate(advice_lines[:2]):
-        draw.text((20, 262 + index * 24), f"[衣] {line}", font=fonts.item, fill=0)
+    life_index_text = (
+        f"紫外线: {weather.ultraviolet} | 舒适度: {weather.comfort}"
+    )
+    draw.text((20, 270), life_index_text, font=fonts.item, fill=0)
 
     return finish_canvas(image)
