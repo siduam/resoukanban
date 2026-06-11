@@ -1,5 +1,4 @@
 import unittest
-from datetime import datetime
 
 from config import load_settings
 from data_sources import Forecast, WeatherData
@@ -35,12 +34,15 @@ class RendererTests(unittest.TestCase):
         weather = WeatherData(
             city="津南区",
             weather="晴",
+            update_time="12:05",
             temp_curr=24,
             temp_low=18,
             temp_high=28,
             wind_info="2级 东南",
             humidity="50%",
             feel_temp="24.0°C",
+            ultraviolet="弱",
+            comfort="舒适",
             sunrise="05:00 AM",
             sunset="07:00 PM",
             forecasts=[
@@ -53,7 +55,6 @@ class RendererTests(unittest.TestCase):
             weather,
             self.settings,
             self.fonts,
-            datetime(2026, 6, 11, 12, 0),
         )
 
         self.assertEqual(image.size, CANVAS_SIZE)
