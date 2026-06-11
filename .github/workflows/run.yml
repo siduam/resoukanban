@@ -22,14 +22,17 @@ jobs:
           python-version: '3.10'
 
       - name: 安装依赖包
-        run: pip install requests pillow zhdate
+        run: pip install -r requirements.txt
+
+      - name: 运行测试
+        run: python -m unittest discover -s tests -v
 
       - name: 运行！生成图片并推送
         env:
           ZECTRIX_API_KEY: ${{ secrets.ZECTRIX_API_KEY }}
           ZECTRIX_MAC: ${{ secrets.ZECTRIX_MAC }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          AMAP_WEATHER_KEY: ${{ secrets.AMAP_WEATHER_KEY }}   # 新增这一行
+          CAIYUN_API_TOKEN: ${{ secrets.CAIYUN_API_TOKEN }}
         run: python main.py
 
     
