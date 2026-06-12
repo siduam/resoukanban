@@ -2,7 +2,8 @@ name: 墨水屏综合看板推送
 
 on:
   schedule:
-    - cron: '47 * * * *'  # 每小时运行一次
+    - cron: '07 */2 * * *'
+      timezone: Asia/Shanghai
   workflow_dispatch:
 
 jobs:
