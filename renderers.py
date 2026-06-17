@@ -30,11 +30,11 @@ def load_fonts(font_path: Path) -> Fonts:
         return ImageFont.truetype(str(font_path), size * RENDER_SCALE)
 
     return Fonts(
-        title=font(24),
-        item=font(18),
-        small=font(14),
-        temperature=font(48),
-        weather=font(36),
+        title=font(21),
+        item=font(15),
+        small=font(12),
+        temperature=font(44),
+        weather=font(32),
     )
 
 
@@ -109,13 +109,14 @@ def wrap_text_by_pixels(draw, text: str, font, max_width: int) -> List[str]:
 
 
 def _draw_hotlist_page(draw, page_title, items, start_index, fonts):
-    draw.rounded_rectangle([(10, 10), (390, 45)], radius=8, fill=0)
+    draw.rounded_rectangle([(10, 10), (390, 42)], radius=8, fill=0)
     draw.text((20, 15), page_title, font=fonts.title, fill=255)
 
-    y = 55
+    y = 50
     last_index = start_index
-    item_gap = 12
-    line_height = 23
+    item_gap = 8
+    line_height = 20
+    badge_size = 21
 
     for index in range(start_index, len(items)):
         lines = wrap_text_by_pixels(draw, items[index], fonts.item, max_width=340)
@@ -124,16 +125,27 @@ def _draw_hotlist_page(draw, page_title, items, start_index, fonts):
             break
 
         current_number = index + 1
-        draw.rounded_rectangle([(10, y), (36, y + 24)], radius=6, fill=0)
-        number_x = 18 if current_number < 10 else 11
-        draw.text((number_x, y + 3), str(current_number), font=fonts.small, fill=255)
+        draw.rounded_rectangle([(10, y), (10 + badge_size, y + badge_size)], radius=5, fill=0)
+        number_text = str(current_number)
+        number_box = draw.textbbox((0, 0), number_text, font=fonts.small)
+        number_width = number_box[2] - number_box[0]
+        number_height = number_box[3] - number_box[1]
+        draw.text(
+            (
+                10 + (badge_size - number_width) / 2,
+                y + (badge_size - number_height) / 2 - 1,
+            ),
+            number_text,
+            font=fonts.small,
+            fill=255,
+        )
 
         current_y = y + 1
         for line in lines:
             draw.text((45, current_y), line, font=fonts.item, fill=0)
             current_y += line_height
 
-        y += max(24, required_height) + item_gap
+        y += max(badge_size, required_height) + item_gap
         last_index = index + 1
         if y < 290:
             draw.line([(45, y - item_gap / 2), (380, y - item_gap / 2)], fill=0)
