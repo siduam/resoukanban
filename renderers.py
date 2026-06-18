@@ -9,8 +9,6 @@ from data_sources import WeatherData
 
 
 CANVAS_SIZE = (400, 300)
-RENDER_SCALE = 2
-MONO_THRESHOLD = 176
 
 
 @dataclass(frozen=True)
@@ -18,6 +16,9 @@ class Fonts:
     title: ImageFont.FreeTypeFont
     item: ImageFont.FreeTypeFont
     small: ImageFont.FreeTypeFont
+    weather_title: ImageFont.FreeTypeFont
+    weather_item: ImageFont.FreeTypeFont
+    weather_small: ImageFont.FreeTypeFont
     temperature: ImageFont.FreeTypeFont
     weather: ImageFont.FreeTypeFont
 
@@ -26,64 +27,29 @@ def load_fonts(font_path: Path) -> Fonts:
     if not font_path.exists():
         raise FileNotFoundError(f"找不到字体文件: {font_path}")
 
-    def font(size):
-        return ImageFont.truetype(str(font_path), size * RENDER_SCALE)
+    def font(size, scale=1):
+        return ImageFont.truetype(str(font_path), size * scale)
 
     return Fonts(
         title=font(21),
         item=font(15),
         small=font(12),
-        temperature=font(44),
-        weather=font(32),
+        weather_title=font(24),
+        weather_item=font(18),
+        weather_small=font(14),
+        temperature=font(48),
+        weather=font(36),
     )
 
 
-def new_canvas():
-    size = tuple(dimension * RENDER_SCALE for dimension in CANVAS_SIZE)
-    return Image.new("L", size, color=255)
+def new_mono_canvas():
+    return Image.new("1", CANVAS_SIZE, color=1)
 
 
-def finish_canvas(image: Image.Image) -> Image.Image:
-    image = image.resize(CANVAS_SIZE, Image.Resampling.LANCZOS)
-    return image.point(lambda pixel: 0 if pixel < MONO_THRESHOLD else 255, mode="1")
-
-
-class ScaledDraw:
-    def __init__(self, image: Image.Image):
-        self.draw = ImageDraw.Draw(image)
-
-    @staticmethod
-    def _point(point):
-        return tuple(value * RENDER_SCALE for value in point)
-
-    @classmethod
-    def _coordinates(cls, coordinates):
-        return [cls._point(point) for point in coordinates]
-
-    def text(self, position, text, **kwargs):
-        return self.draw.text(self._point(position), text, **kwargs)
-
-    def textlength(self, text, **kwargs):
-        return self.draw.textlength(text, **kwargs) / RENDER_SCALE
-
-    def textbbox(self, position, text, **kwargs):
-        box = self.draw.textbbox(self._point(position), text, **kwargs)
-        return tuple(value / RENDER_SCALE for value in box)
-
-    def rounded_rectangle(self, coordinates, radius=0, width=1, **kwargs):
-        return self.draw.rounded_rectangle(
-            self._coordinates(coordinates),
-            radius=radius * RENDER_SCALE,
-            width=width * RENDER_SCALE,
-            **kwargs,
-        )
-
-    def line(self, coordinates, width=1, **kwargs):
-        return self.draw.line(
-            self._coordinates(coordinates),
-            width=width * RENDER_SCALE,
-            **kwargs,
-        )
+def mono_draw(image: Image.Image):
+    draw = ImageDraw.Draw(image)
+    draw.fontmode = "1"
+    return draw
 
 
 def wrap_text_by_pixels(draw, text: str, font, max_width: int) -> List[str]:
@@ -159,17 +125,18 @@ def render_information_page(
     start_index: int,
     fonts: Fonts,
 ) -> Tuple[Image.Image, int]:
-    image = new_canvas()
+    image = new_mono_canvas()
+    draw = mono_draw(image)
     next_start = _draw_hotlist_page(
-        ScaledDraw(image),
+        draw,
         f"◆ {page_title}",
         titles,
         start_index,
         fonts,
     )
     if next_start == start_index:
-        ScaledDraw(image).text((45, 70), "暂无更多内容", font=fonts.item, fill=0)
-    return finish_canvas(image), next_start
+        draw.text((45, 70), "暂无更多内容", font=fonts.item, fill=0)
+    return image, next_start
 
 
 def render_weather_dashboard(
@@ -177,53 +144,53 @@ def render_weather_dashboard(
     settings: Settings,
     fonts: Fonts,
 ) -> Image.Image:
-    image = new_canvas()
-    draw = ScaledDraw(image)
+    image = new_mono_canvas()
+    draw = mono_draw(image)
 
     if weather.temp_curr == 0 and not weather.forecasts:
         draw.text(
             (20, 50),
             "天气数据获取失败，请检查 API Key 或网络",
-            font=fonts.item,
+            font=fonts.weather_item,
             fill=0,
         )
-        return finish_canvas(image)
+        return image
 
-    draw.text((20, 10), settings.city_display_name, font=fonts.title, fill=0)
+    draw.text((20, 10), settings.city_display_name, font=fonts.weather_title, fill=0)
     time_text = f"更新: {weather.update_time}"
-    time_box = draw.textbbox((0, 0), time_text, font=fonts.small)
+    time_box = draw.textbbox((0, 0), time_text, font=fonts.weather_small)
     time_width = time_box[2] - time_box[0]
-    draw.text((390 - time_width, 12), time_text, font=fonts.small, fill=0)
+    draw.text((390 - time_width, 12), time_text, font=fonts.weather_small, fill=0)
 
-    draw.text((25, 40), f"{weather.temp_curr}°C", font=fonts.temperature, fill=0)
+    draw.text((25, 40), f"{weather.temp_curr}°", font=fonts.temperature, fill=0)
     draw.text(
         (25, 100),
         f"{weather.temp_low}°/{weather.temp_high}°",
-        font=fonts.item,
+        font=fonts.weather_item,
         fill=0,
     )
     draw.text((150, 45), weather.weather, font=fonts.weather, fill=0)
 
-    draw.rounded_rectangle([(235, 45), (385, 130)], radius=8, outline=0, fill=0)
-    draw.text((255, 56), weather.wind_info, font=fonts.small, fill=255)
-    draw.text((255, 80), f"湿度 {weather.humidity}", font=fonts.small, fill=255)
-    draw.text((255, 104), f"体感 {weather.feel_temp}", font=fonts.small, fill=255)
+    draw.rounded_rectangle([(235, 45), (385, 130)], radius=8, outline=0, fill=255)
+    draw.text((255, 56), weather.wind_info, font=fonts.weather_small, fill=0)
+    draw.text((255, 80), f"湿度 {weather.humidity}", font=fonts.weather_small, fill=0)
+    draw.text((255, 104), f"体感 {weather.feel_temp}", font=fonts.weather_small, fill=0)
 
     draw.text(
         (25, 135),
         f"日出 {weather.sunrise}   日落 {weather.sunset}",
-        font=fonts.item,
+        font=fonts.weather_item,
         fill=0,
     )
     draw.line([(20, 160), (380, 160)], fill=0)
 
     for x, forecast in zip([30, 200], weather.forecasts[:2]):
-        draw.text((x, 175), forecast.date, font=fonts.item, fill=0)
-        draw.text((x, 200), forecast.weather, font=fonts.item, fill=0)
+        draw.text((x, 175), forecast.date, font=fonts.weather_item, fill=0)
+        draw.text((x, 200), forecast.weather, font=fonts.weather_item, fill=0)
         draw.text(
             (x, 220),
             f"{forecast.temp_low}°~{forecast.temp_high}°",
-            font=fonts.item,
+            font=fonts.weather_item,
             fill=0,
         )
 
@@ -231,6 +198,6 @@ def render_weather_dashboard(
     life_index_text = (
         f"紫外线: {weather.ultraviolet} | 舒适度: {weather.comfort}"
     )
-    draw.text((20, 270), life_index_text, font=fonts.item, fill=0)
+    draw.text((20, 270), life_index_text, font=fonts.weather_item, fill=0)
 
-    return finish_canvas(image)
+    return image

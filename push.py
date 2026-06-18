@@ -35,7 +35,7 @@ def push_image(image: Image.Image, page_id: int, api_key: str, mac_address: str)
             "image/png",
         )
     }
-    data = {"dither": "true", "pageId": str(page_id)}
+    data = {"dither": "false", "pageId": str(page_id)}
 
     try:
         response = requests.post(
