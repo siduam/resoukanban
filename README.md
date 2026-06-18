@@ -30,9 +30,9 @@
 
 ### 2. 上传中文字体文件(可选)
 如果你想更换自定义字体：
-1. 准备一个中文字体文件（后缀为 `.ttf`，默认使用的是`MiSans-Medium.ttf`）。
-2. 将其重命名为 **`font.ttf`** （注意必须全部为小写）。
-3. 在你的仓库首页，点击 **`Add file`** -> **`Upload files`** 上传并覆盖原文件，点击 **`Commit changes`** 保存。
+1. 项目默认使用 `resources/fonts/zfull-gb.ttf` 点阵字体，更适合 400×300 纯黑白墨水屏。
+2. 如需换回普通中文字体，可修改 `config.py` 中的 `DEFAULT_FONT_PATH`，例如指向根目录的 `font.ttf`。
+3. 准备一个中文字体文件（后缀为 `.ttf`），上传到仓库后更新 `DEFAULT_FONT_PATH` 即可。
 
 ### 3. 配置隐私密钥 (Secrets)
 由于涉及个人设备和 API 额度，需要将密钥配置在 GitHub 隐藏设置中。

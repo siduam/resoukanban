@@ -38,7 +38,7 @@ class PushTests(unittest.TestCase):
             "AA:BB:CC/display/image",
         )
         self.assertEqual(kwargs["headers"], {"X-API-Key": "test-key"})
-        self.assertEqual(kwargs["data"], {"dither": "true", "pageId": "3"})
+        self.assertEqual(kwargs["data"], {"dither": "false", "pageId": "3"})
         self.assertEqual(kwargs["files"]["images"][0], "page_3.png")
 
 

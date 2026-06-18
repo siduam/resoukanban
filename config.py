@@ -26,6 +26,7 @@ CITY_DISPLAY_NAME = "杨浦区 | 中环和润苑"
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+DEFAULT_FONT_PATH = PROJECT_ROOT / "resources" / "fonts" / "zfull-gb.ttf"
 
 
 SOURCE_NAMES = {
@@ -108,7 +109,7 @@ def load_settings() -> Settings:
         caiyun_longitude=CAIYUN_LONGITUDE,
         caiyun_latitude=CAIYUN_LATITUDE,
         city_display_name=CITY_DISPLAY_NAME,
-        font_path=PROJECT_ROOT / "font.ttf",
+        font_path=DEFAULT_FONT_PATH,
         zectrix_api_key=os.environ.get("ZECTRIX_API_KEY", ""),
         mac_address=os.environ.get("ZECTRIX_MAC", ""),
         caiyun_api_token=os.environ.get("CAIYUN_API_TOKEN", ""),
