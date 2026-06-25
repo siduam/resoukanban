@@ -7,7 +7,7 @@ from typing import Dict, FrozenSet, Mapping, Tuple
 # 用户自定义区 
 ENABLED_PAGES = "1,2,3,4"
 PAGE_SOURCES = {
-    1: {"source": "rss", "title": "TW93","url":"https://rss.app/feeds/6YYsonzuUsSA6H9M.xml"},
+    1: {"source": "bilibili", "title": "B站热搜"},
     #1: {"source": "bilibili", "title": "B站热搜"},
     2: {"source": "rss", "title": "少数派","url":"https://sspai.com/feed"},
     3: {"source": "zhihu", "title": "知乎热榜"}
