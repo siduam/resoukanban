@@ -4,3 +4,4 @@ __pycache__/
 *.py[cod]
 preview/
 page_*.png
+.cache/

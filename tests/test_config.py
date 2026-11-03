@@ -17,7 +17,7 @@ class ParsePageSourcesTests(unittest.TestCase):
         sources = parse_page_sources(
             {
                 1: {"source": "zhihu", "title": ""},
-                2: {
+                3: {
                     "source": "rss",
                     "title": "Example",
                     "url": "https://example.com/feed.xml",
@@ -27,7 +27,7 @@ class ParsePageSourcesTests(unittest.TestCase):
 
         self.assertEqual(sources[1].title, "知乎热榜")
         self.assertEqual(
-            sources[2].cache_key,
+            sources[3].cache_key,
             ("rss", "https://example.com/feed.xml"),
         )
 
@@ -35,8 +35,12 @@ class ParsePageSourcesTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "必须配置 url"):
             parse_page_sources({1: {"source": "rss", "title": "Example"}})
 
+    def test_rejects_source_on_nba_page(self):
+        with self.assertRaisesRegex(ValueError, "第 1、3 页"):
+            parse_page_sources({2: {"source": "zhihu"}})
+
     def test_rejects_source_on_weather_page(self):
-        with self.assertRaisesRegex(ValueError, "第 1-3 页"):
+        with self.assertRaisesRegex(ValueError, "第 1、3 页"):
             parse_page_sources({4: {"source": "zhihu"}})
 
 

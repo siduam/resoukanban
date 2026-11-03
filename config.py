@@ -6,19 +6,20 @@ from typing import Dict, FrozenSet, Mapping, Tuple
 
 # 用户自定义区 
 ENABLED_PAGES = "1,2,3,4"
+# 第 1、3 页为信息页；第 2 页固定为 NBA 看板；第 4 页固定为彩云天气。
 PAGE_SOURCES = {
     1: {"source": "github", "title": "GitHub 热门"},
     #1: {"source": "bilibili", "title": "B站热搜"},
-    2: {"source": "rss", "title": "少数派","url":"https://sspai.com/feed"},
     3: {"source": "zhihu", "title": "知乎热榜"}
-    # RSS/Atom 示例：ß
+    # RSS/Atom 示例：
     # 3: {
     #     "source": "rss",
     #     "title": "少数派",
     #     "url": "https://sspai.com/feed",
     # },
-    # "source": "zhihu", "title": "知乎热榜"
 }
+# NBA 赛事数据源："espn"（默认，免 key）或 "official"（NBA 官方 CDN）。
+NBA_SCORE_SOURCE = "espn"
 # 彩云天气在中国大陆使用 GCJ-02（高德）坐标，顺序为经度、纬度。
 CAIYUN_LONGITUDE = 121.5554
 CAIYUN_LATITUDE = 31.2820
@@ -27,6 +28,9 @@ CITY_DISPLAY_NAME = "杨浦区 | 中环和润苑"
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_FONT_PATH = PROJECT_ROOT / "resources" / "fonts" / "zfull-gb.ttf"
+
+# 可以配置信息源的页面（第 2 页是 NBA，第 4 页是天气）。
+INFO_PAGES = frozenset({1, 3})
 
 
 SOURCE_NAMES = {
@@ -66,8 +70,10 @@ def parse_page_sources(
 ) -> Dict[int, PageSource]:
     page_sources = {}
     for page, raw_config in value.items():
-        if page not in {1, 2, 3}:
-            raise ValueError(f"信息源只能配置在第 1-3 页，收到第 {page} 页")
+        if page not in INFO_PAGES:
+            raise ValueError(
+                f"信息源只能配置在第 1、3 页（第 2 页为 NBA 看板），收到第 {page} 页"
+            )
 
         source = raw_config.get("source", "").strip().lower()
         if source not in SOURCE_NAMES:
@@ -100,6 +106,7 @@ class Settings:
     zectrix_api_key: str = ""
     mac_address: str = ""
     caiyun_api_token: str = ""
+    nba_score_source: str = "espn"
 
 
 def load_settings() -> Settings:
@@ -113,4 +120,5 @@ def load_settings() -> Settings:
         zectrix_api_key=os.environ.get("ZECTRIX_API_KEY", ""),
         mac_address=os.environ.get("ZECTRIX_MAC", ""),
         caiyun_api_token=os.environ.get("CAIYUN_API_TOKEN", ""),
+        nba_score_source=os.environ.get("NBA_SCORE_SOURCE", NBA_SCORE_SOURCE).strip().lower(),
     )

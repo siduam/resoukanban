@@ -1,15 +1,39 @@
 import argparse
 from collections import OrderedDict
+from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 
-from config import Settings, load_settings
+from config import INFO_PAGES, Settings, load_settings, parse_enabled_pages
 from data_sources import get_caiyun_weather, get_information_items
+from nba import TZ, collect
 from push import push_images, save_images
 from renderers import (
     load_fonts,
+    load_nba_fonts,
     render_information_page,
+    render_nba_page,
     render_weather_dashboard,
 )
+
+
+def generate_nba_page(settings: Settings):
+    """生成 NBA 单页看板。数据源异常时退化为“暂无赛程”画面，不抛异常。"""
+    now = datetime.now(TZ)
+    try:
+        data = collect(settings, now.date())
+    except Exception as exc:  # noqa: BLE001 - 数据源问题不应中断整轮推送
+        print(f"警告: NBA 数据获取失败: {exc}")
+        data = {"days": [], "news": []}
+
+    image, state = render_nba_page(
+        data,
+        now.date(),
+        load_nba_fonts(settings.font_path),
+        now,
+    )
+    print(f"NBA 状态: {state['status']}（建议 {state['poll']} 分钟后刷新）")
+    return image
 
 
 def generate_pages(settings: Settings):
@@ -17,7 +41,7 @@ def generate_pages(settings: Settings):
     pages = {}
 
     source_groups = OrderedDict()
-    for page in sorted(settings.enabled_pages & {1, 2, 3}):
+    for page in sorted(settings.enabled_pages & INFO_PAGES):
         page_source = settings.page_sources.get(page)
         if page_source is None:
             print(f"警告: Page {page} 未配置信息源，已跳过")
@@ -42,6 +66,13 @@ def generate_pages(settings: Settings):
                 fonts,
             )
 
+    if 2 in settings.enabled_pages:
+        print("生成 Page 2: NBA 赛程看板...")
+        try:
+            pages[2] = generate_nba_page(settings)
+        except Exception as exc:  # noqa: BLE001 - 单页失败时保留设备上的旧图
+            print(f"警告: Page 2 生成失败，已跳过: {exc}")
+
     if 4 in settings.enabled_pages:
         print("生成 Page 4: 彩云天气看板...")
         weather = get_caiyun_weather(settings)
@@ -63,12 +94,30 @@ def build_parser():
         default=Path("preview"),
         help="预览图输出目录，默认是 ./preview",
     )
+    parser.add_argument(
+        "--pages",
+        help="只生成指定页面，逗号分隔，例如 2 或 1,2,4；默认使用 ENABLED_PAGES",
+    )
     return parser
 
 
 def run(argv=None):
     args = build_parser().parse_args(argv)
     settings = load_settings()
+
+    if args.pages:
+        try:
+            selected = parse_enabled_pages(args.pages)
+        except ValueError as exc:
+            print(f"错误: {exc}")
+            return 1
+        settings = replace(
+            settings,
+            enabled_pages=settings.enabled_pages & selected,
+        )
+        if not settings.enabled_pages:
+            print(f"错误: --pages {args.pages} 与 ENABLED_PAGES 没有交集")
+            return 1
 
     if not args.preview and (not settings.zectrix_api_key or not settings.mac_address):
         print("错误: 请先配置 ZECTRIX_API_KEY 和 ZECTRIX_MAC")
