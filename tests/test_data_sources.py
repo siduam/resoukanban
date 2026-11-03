@@ -20,7 +20,7 @@ def make_settings(token="test-token"):
         caiyun_longitude=117.32,
         caiyun_latitude=38.99,
         city_display_name="津南区 | 天大北洋园",
-        font_path=Path("font.ttf"),
+        font_path=Path("dummy.ttf"),
         caiyun_api_token=token,
     )
 

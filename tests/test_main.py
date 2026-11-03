@@ -16,7 +16,7 @@ def make_settings(enabled_pages, page_sources=None):
         caiyun_longitude=117.32,
         caiyun_latitude=38.99,
         city_display_name="测试城市",
-        font_path=Path("font.ttf"),
+        font_path=Path("dummy.ttf"),
     )
 
 
