@@ -8,14 +8,19 @@ import requests
 
 import nba
 from config import DEFAULT_FONT_PATH
-from renderers import load_nba_fonts, render_nba_page
+from renderers import render_nba_page
+
+
+TODAY = dt.date(2026, 11, 5)
+NOW_BEFORE_15 = dt.datetime(2026, 11, 5, 12, 0, tzinfo=nba.TZ)
+NOW_AFTER_15 = dt.datetime(2026, 11, 5, 20, 0, tzinfo=nba.TZ)
 
 
 def espn_payload():
     return {
         "events": [
             {
-                "date": "2026-11-04T00:30Z",
+                "date": "2026-11-05T00:30Z",
                 "competitions": [
                     {
                         "status": {
@@ -39,7 +44,7 @@ def espn_payload():
                 ],
             },
             {
-                "date": "2026-11-04T03:00Z",
+                "date": "2026-11-05T03:00Z",
                 "competitions": [
                     {
                         "status": {"type": {"state": "pre"}},
@@ -62,30 +67,34 @@ def espn_payload():
     }
 
 
-def make_game(state="final", **overrides):
+def make_game(state="final", start="2026-11-05T00:30Z", **overrides):
     game = {
         "away": "老鹰",
         "home": "凯尔特人",
         "away_code": "ATL",
         "home_code": "BOS",
-        "away_score": "108" if state == "final" else "-",
-        "home_score": "104" if state == "final" else "-",
-        "status": "已结束" if state == "final" else "08:00",
+        "away_score": "108" if state == "final" else ("88" if state == "live" else "-"),
+        "home_score": "104" if state == "final" else ("90" if state == "live" else "-"),
+        "status": {
+            "final": "已结束",
+            "live": "3节 · 剩余 04:28",
+            "scheduled": "08:30",
+        }[state],
         "state": state,
-        "start": "2026-11-04T00:30Z",
+        "start": start,
     }
     game.update(overrides)
     return game
 
 
-def make_data(today_games, yesterday_games=None, future_games=None):
+def make_data(today_games, tomorrow_games=None, day_after_games=None):
     return {
         "days": [
-            {"date": "2026-11-03", "games": yesterday_games or []},
-            {"date": "2026-11-04", "games": today_games},
-            {"date": "2026-11-05", "games": future_games or []},
-        ],
-        "news": [{"title": "测试热点标题", "source": "新浪体育", "age": ""}],
+            {"date": "2026-11-04", "games": []},
+            {"date": "2026-11-05", "games": today_games},
+            {"date": "2026-11-06", "games": tomorrow_games or []},
+            {"date": "2026-11-07", "games": day_after_games or []},
+        ]
     }
 
 
@@ -93,7 +102,7 @@ class EspnParsingTests(unittest.TestCase):
     def test_maps_teams_scores_and_status(self):
         games = nba.parse_espn_games(
             espn_payload(),
-            dt.date(2026, 11, 4),
+            dt.date(2026, 11, 5),
         )["games"]
 
         self.assertEqual(len(games), 2)
@@ -110,7 +119,7 @@ class EspnParsingTests(unittest.TestCase):
         payload = espn_payload()
         payload["events"][1]["date"] = ""
 
-        games = nba.parse_espn_games(payload, dt.date(2026, 11, 4))["games"]
+        games = nba.parse_espn_games(payload, dt.date(2026, 11, 5))["games"]
 
         self.assertEqual(games[1]["status"], "待定")
 
@@ -123,7 +132,7 @@ class OfficialParsingTests(unittest.TestCase):
                     {
                         "gameStatus": 3,
                         "gameStatusText": "Final",
-                        "gameTimeUTC": "2026-11-04T00:00Z",
+                        "gameTimeUTC": "2026-11-05T00:00Z",
                         "awayTeam": {"teamTricode": "BOS", "score": "110"},
                         "homeTeam": {"teamTricode": "MIA", "score": "100"},
                     }
@@ -131,7 +140,7 @@ class OfficialParsingTests(unittest.TestCase):
             }
         }
 
-        games = nba.parse_official_games(payload, dt.date(2026, 11, 4))["games"]
+        games = nba.parse_official_games(payload, dt.date(2026, 11, 5))["games"]
 
         self.assertEqual(games[0]["away"], "凯尔特人")
         self.assertEqual(games[0]["home"], "热火")
@@ -139,120 +148,100 @@ class OfficialParsingTests(unittest.TestCase):
         self.assertEqual(games[0]["status"], "已结束")
 
 
-class NewsTests(unittest.TestCase):
-    def test_feed_filters_non_nba_items(self):
-        payload = {
-            "result": {
-                "data": {
-                    "items": [
-                        {"title": "湖人击败勇士取得三连胜"},
-                        {"title": "英超本轮焦点战前瞻"},
-                        {"title": "NBA"},
-                        {"title": "湖人击败勇士取得三连胜"},
-                    ]
-                }
-            }
-        }
-
-        self.assertEqual(
-            nba._feed_titles(payload),
-            ["湖人击败勇士取得三连胜"],
-        )
-
-    def test_regex_listing_prefers_newer_dates(self):
-        html_text = (
-            '<a href="/nba/2026-11-01/doc-old.html">旧的一条中文新闻标题</a>'
-            '<a href="/nba/2026-11-03/doc-new.html">新的一条中文新闻标题</a>'
-            '<a href="/nba/2026-11-02/doc-mid.html">中间的一条中文新闻</a>'
-        )
-
-        self.assertEqual(
-            nba._regex_news(html_text),
-            ["新的一条中文新闻标题", "中间的一条中文新闻", "旧的一条中文新闻标题"],
-        )
-
-
-class BuildStateTests(unittest.TestCase):
-    def setUp(self):
-        self.date = dt.date(2026, 11, 4)
-        self.now = dt.datetime(2026, 11, 4, 20, 0, tzinfo=nba.TZ)
-
-    def test_live_takes_priority(self):
-        data = make_data(
-            [make_game("live"), make_game("scheduled", start="2026-11-05T00:00Z")],
-        )
-
-        state = nba.build_state(data, self.date, self.now)
-
-        self.assertEqual(state["status"], "LIVE")
-        self.assertEqual(state["poll"], 10)
-        self.assertEqual(state["focus"]["state"], "live")
-
-    def test_next_when_nothing_live(self):
-        data = make_data(
-            [make_game("scheduled", start="2026-11-05T00:00Z")],
-        )
-
-        state = nba.build_state(data, self.date, self.now)
-
-        self.assertEqual(state["status"], "NEXT")
-        self.assertEqual(state["focus"]["state"], "scheduled")
-
-    def test_final_when_today_finished(self):
-        data = make_data([make_game("final")])
-
-        state = nba.build_state(data, self.date, self.now)
-
-        self.assertEqual(state["status"], "FINAL")
-        self.assertEqual(state["poll"], 120)
-        self.assertEqual(len(state["recent_finals"]), 1)
-
-    def test_rest_reuses_previous_results(self):
-        data = make_data(
-            [],
-            yesterday_games=[make_game("final", start="2026-11-03T00:30Z")],
-            future_games=[make_game("scheduled", start="2026-11-05T00:00Z")],
-        )
-
-        state = nba.build_state(data, self.date, self.now)
-
-        self.assertEqual(state["status"], "REST")
-        self.assertEqual(state["poll"], 720)
-        self.assertEqual(len(state["recent_finals"]), 1)
-        self.assertIsNotNone(state["focus"])
-
-
 class RenderTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if not DEFAULT_FONT_PATH.exists():
             raise unittest.SkipTest("缺少字体文件")
-        cls.fonts = load_nba_fonts(DEFAULT_FONT_PATH)
+        cls.font_path = DEFAULT_FONT_PATH
 
-    def test_renders_mono_canvas(self):
-        data = make_data([make_game("final")])
+    def render(self, data, now):
+        return render_nba_page(data, now, self.font_path)
 
-        image, state = render_nba_page(
-            data,
-            dt.date(2026, 11, 4),
-            self.fonts,
-            dt.datetime(2026, 11, 4, 20, 0, tzinfo=nba.TZ),
+    def test_before_15_shows_today(self):
+        data = make_data(
+            [make_game("final"), make_game("live", start="2026-11-05T03:00Z")],
+            tomorrow_games=[make_game("scheduled", start="2026-11-06T00:30Z")],
         )
 
+        image, info = self.render(data, NOW_BEFORE_15)
+
+        self.assertEqual(info["label"], "今日")
+        self.assertEqual(info["date"], TODAY)
+        self.assertEqual(info["count"], 2)
         self.assertEqual(image.size, (400, 300))
         self.assertEqual(image.mode, "1")
-        self.assertEqual(state["status"], "FINAL")
         self.assertEqual(image.getextrema()[0], 0)
 
-    def test_renders_without_games_or_news(self):
-        image, state = render_nba_page(
-            {"days": [], "news": []},
-            dt.date(2026, 11, 4),
-            self.fonts,
-            dt.datetime(2026, 11, 4, 20, 0, tzinfo=nba.TZ),
+    def test_after_15_shows_tomorrow(self):
+        data = make_data(
+            [make_game("final")],
+            tomorrow_games=[
+                make_game("scheduled", start="2026-11-06T00:30Z"),
+                make_game("scheduled", start="2026-11-06T03:00Z"),
+            ],
         )
 
-        self.assertEqual(state["status"], "REST")
+        image, info = self.render(data, NOW_AFTER_15)
+
+        self.assertEqual(info["label"], "明日")
+        self.assertEqual(info["date"], dt.date(2026, 11, 6))
+        self.assertEqual(info["count"], 2)
+        self.assertEqual(image.size, (400, 300))
+
+    def test_15_oclock_is_the_cutoff(self):
+        data = make_data(
+            [make_game("final")],
+            tomorrow_games=[make_game("scheduled", start="2026-11-06T00:30Z")],
+        )
+
+        _, before = self.render(
+            data, dt.datetime(2026, 11, 5, 14, 59, tzinfo=nba.TZ)
+        )
+        _, after = self.render(
+            data, dt.datetime(2026, 11, 5, 15, 0, tzinfo=nba.TZ)
+        )
+
+        self.assertEqual(before["label"], "今日")
+        self.assertEqual(after["label"], "明日")
+
+    def test_fifteen_games_fit_on_one_page(self):
+        base = dt.datetime(2026, 11, 5, 0, 0, tzinfo=dt.timezone.utc)
+        games = [
+            make_game(start=(base + dt.timedelta(minutes=30 * index)).strftime("%Y-%m-%dT%H:%MZ"))
+            for index in range(15)
+        ]
+
+        image, info = self.render(make_data(games), NOW_BEFORE_15)
+
+        self.assertEqual(info["count"], 15)
+        self.assertEqual(image.size, (400, 300))
+        # 最后一行应该落在页面底部，而不是被裁掉
+        bottom = image.crop((0, 260, 400, 300))
+        self.assertEqual(bottom.getextrema()[0], 0)
+
+    def test_no_games_falls_back_to_next_matchday(self):
+        data = make_data(
+            [],
+            day_after_games=[make_game("scheduled", start="2026-11-07T00:30Z")],
+        )
+
+        image, info = self.render(data, NOW_BEFORE_15)
+
+        self.assertEqual(info["count"], 0)
+        self.assertEqual(image.size, (400, 300))
+        self.assertEqual(image.getextrema()[0], 0)
+
+    def test_empty_tomorrow_after_15_renders(self):
+        data = make_data(
+            [make_game("final")],
+            day_after_games=[make_game("scheduled", start="2026-11-07T00:30Z")],
+        )
+
+        image, info = self.render(data, NOW_AFTER_15)
+
+        self.assertEqual(info["label"], "明日")
+        self.assertEqual(info["count"], 0)
         self.assertEqual(image.size, (400, 300))
 
 

@@ -1,5 +1,4 @@
 import datetime as dt
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -8,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from config import PROJECT_ROOT, Settings
 from data_sources import WeatherData
-from nba import TZ, build_state, minutes_to_start
+from nba import TZ
 
 
 CANVAS_SIZE = (400, 300)
@@ -209,36 +208,9 @@ def render_weather_dashboard(
 # ---------------------------------------------------------------- NBA 看板
 
 
-@dataclass(frozen=True)
-class NbaFonts:
-    title: ImageFont.FreeTypeFont
-    team: ImageFont.FreeTypeFont
-    code: ImageFont.FreeTypeFont
-    score: ImageFont.FreeTypeFont
-    detail: ImageFont.FreeTypeFont
-    small: ImageFont.FreeTypeFont
-    result_team: ImageFont.FreeTypeFont
-    result_score: ImageFont.FreeTypeFont
-
-
-def load_nba_fonts(font_path: Path) -> NbaFonts:
-    if not font_path.exists():
-        raise FileNotFoundError(f"找不到字体文件: {font_path}")
-
-    def font(size):
-        return ImageFont.truetype(str(font_path), size)
-
-    return NbaFonts(
-        title=font(15),
-        team=font(17),
-        code=font(11),
-        score=font(27),
-        detail=font(13),
-        small=font(11),
-        result_team=font(15),
-        result_score=font(20),
-    )
-
+NBA_LIST_TOP = 44
+NBA_LIST_BOTTOM = 286
+NBA_CUTOFF_HOUR = 15
 
 _NBA_LOGO: Optional[Image.Image] = None
 _NBA_LOGO_TRIED = False
@@ -270,187 +242,200 @@ def _fit(draw, text, text_font, width):
     return text + "…"
 
 
-def _draw_left_centered(draw, xy, text, text_font, fill, max_width):
-    left, top, right, bottom = xy
-    label = _fit(draw, text, text_font, max_width or right - left)
-    bbox = draw.textbbox((0, 0), label, font=text_font)
-    y = (top + bottom - (bbox[3] - bbox[1])) / 2 - bbox[1]
-    draw.text((left, y), label, font=text_font, fill=fill)
+def nba_display_date(now: dt.datetime) -> dt.date:
+    """15:00 前显示当天，15:00 起显示次日预告。"""
+    if now.hour >= NBA_CUTOFF_HOUR:
+        return now.date() + dt.timedelta(days=1)
+    return now.date()
 
 
-def _draw_right_centered(draw, xy, text, text_font, fill, max_width):
-    left, top, right, bottom = xy
-    label = _fit(draw, text, text_font, max_width or right - left)
-    bbox = draw.textbbox((0, 0), label, font=text_font)
-    y = (top + bottom - (bbox[3] - bbox[1])) / 2 - bbox[1]
-    draw.text((right, y), label, font=text_font, fill=fill, anchor="ra")
-
-
-def _draw_recent_finals(draw, state, fonts, black, gray):
-    label = (
-        f"今日赛果 · 共 {len(state['recent_finals'])} 场"
-        if state["status"] == "FINAL"
-        else f"最近比赛日 · 共 {len(state['recent_finals'])} 场"
-    )
-    _draw_left_centered(draw, (44, 84, 356, 105), label, fonts.detail, black, 312)
-
-    finals = state["recent_finals"]
-    band_top, band_bottom = 112, 198
-    row_h = {1: 44, 2: 38, 3: 28}.get(len(finals), 28)
-    block_h = row_h * len(finals)
-    row_top = band_top + max(0, (band_bottom - band_top - block_h) // 2)
-
-    for index, game in enumerate(finals):
-        y = row_top + index * row_h
-        away = _fit(draw, game.get("away"), fonts.result_team, 88)
-        home = _fit(draw, game.get("home"), fonts.result_team, 88)
-        score = "%s : %s" % (
-            game.get("away_score", "-"),
-            game.get("home_score", "-"),
+def _nba_start_at(game: Dict[str, Any]) -> dt.datetime:
+    try:
+        start = dt.datetime.fromisoformat(
+            str(game.get("start", "")).replace("Z", "+00:00")
         )
-        _draw_left_centered(draw, (44, y, 152, y + row_h - 4), away, fonts.result_team, black, 108)
-        draw.text(
-            (200, y + (row_h - 4) / 2),
-            score,
-            font=fonts.result_score,
-            fill=black,
-            stroke_width=1,
-            anchor="mm",
-        )
-        _draw_right_centered(draw, (248, y, 356, y + row_h - 4), home, fonts.result_team, black, 108)
-        if index < len(finals) - 1:
-            draw.line((44, y + row_h - 2, 356, y + row_h - 2), fill=gray, width=1)
+        return start.astimezone(TZ)
+    except (ValueError, TypeError):
+        return dt.datetime.max.replace(tzinfo=dt.timezone.utc)
+
+
+def _nba_start_text(game: Dict[str, Any]) -> str:
+    start = _nba_start_at(game)
+    if start.year == 9999:
+        return "待定"
+    return start.strftime("%H:%M")
+
+
+def _nba_sizes(count: int) -> Tuple[int, int, int]:
+    if count <= 4:
+        return 34, 18, 13
+    if count <= 6:
+        return 30, 17, 12
+    available = NBA_LIST_BOTTOM - NBA_LIST_TOP
+    row_h = max(16, min(28, available // max(1, count)))
+    if row_h >= 26:
+        return row_h, 16, 12
+    if row_h >= 22:
+        return row_h, 15, 12
+    if row_h >= 19:
+        return row_h, 14, 12
+    if row_h >= 17:
+        return row_h, 13, 11
+    return row_h, 12, 11
+
+
+def _nba_next_matchday(days: Dict[str, List[Dict[str, Any]]], after: str):
+    for key in sorted(key for key in days if key > after):
+        if days[key]:
+            return key
+    return None
 
 
 def render_nba_page(
     data: Dict[str, Any],
-    date,
-    fonts: NbaFonts,
-    now: Optional[dt.datetime] = None,
+    now: Optional[dt.datetime],
+    font_path: Path,
 ) -> Tuple[Image.Image, Dict[str, Any]]:
-    """绘制 400×300 NBA 单页看板，返回图片与状态（LIVE/NEXT/FINAL/REST）。"""
+    """绘制 NBA 全天赛程页，返回 (图片, 信息)。
+
+    15:00 前显示当天全部比赛（已结束显示比分、直播中显示比分和“进行中”、
+    未开始显示 vs），15:00 起显示次日赛程预告。场次多时自动压缩行高，
+    15 场也能完整放下。
+    """
     now = now or dt.datetime.now(TZ)
+    target = nba_display_date(now)
+    days = {
+        str(item.get("date")): item.get("games") or []
+        for item in (data.get("days") or [])
+    }
+    games = sorted(days.get(target.isoformat(), []), key=_nba_start_at)
+    label = "今日" if target == now.date() else "明日"
+
+    def font(size: int) -> ImageFont.FreeTypeFont:
+        return ImageFont.truetype(str(font_path), size)
+
     image = new_mono_canvas()
     draw = mono_draw(image)
-    black, white, gray = 0, 255, 0
-    state = build_state(data, date, now)
-
-    draw.rounded_rectangle((12, 12, 388, 288), radius=2, outline=black, width=2)
 
     logo = _nba_logo()
     if logo is not None:
-        image.paste(logo, (18, 15))
+        image.paste(logo, (12, 10))
     else:
-        draw.text((18, 18), "NBA", font=fonts.title, fill=black)
+        draw.text((12, 12), "NBA", font=font(14), fill=0)
 
-    header_text = "%s %s NBA 赛程" % (
-        date.strftime("%m月%d日"),
-        ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][date.weekday()],
+    header = "%d月%02d日 %s · %s %d 场" % (
+        target.month,
+        target.day,
+        ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][target.weekday()],
+        label,
+        len(games),
     )
-    title_width = draw.textlength(header_text, font=fonts.title)
-    draw.text((190 - title_width / 2, 17), header_text, font=fonts.title, fill=black)
-    _draw_left_centered(
-        draw, (310, 13, 382, 39), "更新 %s" % now.strftime("%H:%M"), fonts.small, black, 72
+    draw.text((62, 14), header, font=font(14), fill=0)
+    draw.text(
+        (388, 15),
+        "更新 %s" % now.strftime("%H:%M"),
+        font=font(11),
+        fill=0,
+        anchor="ra",
     )
+    draw.line((12, 38, 388, 38), fill=0, width=1)
 
-    draw.line((14, 43, 386, 43), fill=black, width=1)
-
-    focus = state["focus"]
-    status = state["status"]
-    status_zh = {
-        "LIVE": "直播中",
-        "NEXT": "未开始",
-        "FINAL": "已结束",
-        "REST": "休赛日",
-    }[status]
-    badge_right = 90 if status == "LIVE" else 82
-    draw.rounded_rectangle((20, 51, badge_right, 73), radius=3, fill=black)
-    draw.text(((20 + badge_right) / 2, 62), status_zh, font=fonts.small, fill=white, anchor="mm")
-    type_text = "今日无比赛" if status == "REST" else "常规赛"
-    _draw_left_centered(draw, (310, 51, 380, 73), type_text, fonts.small, black, 70)
-
-    if status in {"FINAL", "REST"} and state["recent_finals"]:
-        _draw_recent_finals(draw, state, fonts, black, gray)
-    elif focus:
-        _draw_left_centered(draw, (44, 84, 136, 108), focus.get("away"), fonts.team, black, 92)
-        _draw_left_centered(draw, (44, 111, 136, 130), focus.get("away_code", "客"), fonts.code, black, 92)
-        _draw_right_centered(draw, (264, 84, 356, 108), focus.get("home"), fonts.team, black, 92)
-        _draw_right_centered(draw, (264, 111, 356, 130), focus.get("home_code", "主"), fonts.code, black, 92)
-
-        if status == "NEXT":
-            center = "@"
-            detail = "今晚 %s · 北京时间" % focus.get("status", "待定")
-            remaining = minutes_to_start(focus, now)
-            sub = (
-                "距开赛约 %02d小时%02d分" % (max(0, remaining) // 60, max(0, remaining) % 60)
-                if remaining < 99999
-                else "今日下一场比赛"
+    if not games:
+        title = "明日无比赛" if label == "明日" else "今日无比赛"
+        draw.text((200, 120), title, font=font(22), fill=0, anchor="mm")
+        next_key = _nba_next_matchday(days, target.isoformat())
+        if next_key:
+            next_date = dt.date.fromisoformat(next_key)
+            next_label = {1: "明日", 2: "后天"}.get(
+                (next_date - now.date()).days,
+                next_date.strftime("%m-%d"),
+            )
+            next_games = days[next_key]
+            draw.text(
+                (200, 168),
+                "下一比赛日 %s · 共 %d 场" % (next_label, len(next_games)),
+                font=font(15),
+                fill=0,
+                anchor="mm",
+            )
+            draw.text(
+                (200, 196),
+                "首场 %s · 北京时间" % _nba_start_text(min(next_games, key=_nba_start_at)),
+                font=font(12),
+                fill=0,
+                anchor="mm",
             )
         else:
-            center = "%s  :  %s" % (
-                focus.get("away_score", "-"),
-                focus.get("home_score", "-"),
+            draw.text((200, 168), "暂无后续赛程", font=font(15), fill=0, anchor="mm")
+        return image, {"date": target, "label": label, "count": 0}
+
+    row_h, name_px, meta_px = _nba_sizes(len(games))
+    name_font = font(name_px)
+    meta_font = font(meta_px)
+    badge_font = font(max(9, meta_px - 1))
+    block_h = len(games) * row_h
+    list_bottom = 270 if len(games) <= 6 else NBA_LIST_BOTTOM
+    top = NBA_LIST_TOP + max(0, (list_bottom - NBA_LIST_TOP - block_h) // 2)
+
+    for index, game in enumerate(games):
+        center_y = top + index * row_h + row_h // 2
+        draw.text(
+            (14, center_y),
+            _nba_start_text(game),
+            font=meta_font,
+            fill=0,
+            anchor="lm",
+        )
+        draw.text(
+            (150, center_y),
+            _fit(draw, game.get("away"), name_font, 88),
+            font=name_font,
+            fill=0,
+            anchor="rm",
+        )
+        draw.text(
+            (250, center_y),
+            _fit(draw, game.get("home"), name_font, 88),
+            font=name_font,
+            fill=0,
+            anchor="lm",
+        )
+
+        if game.get("state") == "scheduled":
+            draw.text((200, center_y), "vs", font=meta_font, fill=0, anchor="mm")
+        else:
+            draw.text(
+                (200, center_y),
+                "%s-%s" % (game.get("away_score", "-"), game.get("home_score", "-")),
+                font=name_font,
+                fill=0,
+                anchor="mm",
             )
-            detail = focus.get("status", "比赛进行中") if status == "LIVE" else "全场结束"
-            sub = {"LIVE": "当前直播比分", "FINAL": "今日最终赛果", "REST": "最近一场赛果"}[status]
-
-        draw.text((200, 105), center, font=fonts.score, fill=black, stroke_width=1, anchor="mm")
-        draw.text((200, 150), _fit(draw, detail, fonts.detail, 232), font=fonts.detail, fill=black, anchor="mm")
-        draw.text((200, 176), _fit(draw, sub, fonts.small, 232), font=fonts.small, fill=black, anchor="mm")
-    else:
-        _draw_left_centered(draw, (84, 95, 316, 124), "今日暂无赛程", fonts.team, black, 232)
-        _draw_left_centered(draw, (84, 137, 316, 158), "等待下一场比赛", fonts.detail, black, 232)
-
-    draw.line((14, 202, 386, 202), fill=black, width=1)
-
-    if status == "LIVE":
-        next_games = [game for game in state["today"] if game["state"] == "scheduled"]
-        aux = "NEXT  %s · 今日还有 %d 场" % (
-            next_games[0].get("status", "待定") if next_games else "暂无",
-            len(next_games),
-        )
-    elif status == "NEXT":
-        aux = "TODAY  已结束 %d 场 · 下一场后还有 %d 场" % (
-            sum(game["state"] == "final" for game in state["today"]),
-            max(0, len(state["today"]) - 1),
-        )
-    else:
-        # FINAL / REST：第三栏补全为「下一比赛日标签 · 开赛时间 · 共 N 场」，
-        # 场次按北京开赛日分桶，避免 UTC 跨日误计。
-        next_day = next(
-            (
-                day
-                for day in sorted(
-                    (item for item in (data.get("days") or []) if item["date"] > date.isoformat()),
-                    key=lambda item: item["date"],
+            if game.get("state") == "live":
+                badge_text = "进行中"
+                badge_width = int(draw.textlength(badge_text, font=badge_font)) + 8
+                badge_height = max(12, row_h - 3)
+                left = 388 - badge_width
+                draw.rounded_rectangle(
+                    (left, center_y - badge_height // 2, 388, center_y + badge_height // 2),
+                    radius=2,
+                    fill=0,
                 )
-                if day.get("games")
-            ),
-            None,
+                draw.text(
+                    (left + badge_width / 2, center_y),
+                    badge_text,
+                    font=badge_font,
+                    fill=255,
+                    anchor="mm",
+                )
+
+    if len(games) <= 6:
+        draw.text(
+            (200, 282),
+            "以上时间均为北京时间",
+            font=font(11),
+            fill=0,
+            anchor="mm",
         )
-        if next_day:
-            next_date = dt.date.fromisoformat(next_day["date"])
-            label = {1: "明日", 2: "后天"}.get((next_date - date).days, next_date.strftime("%m-%d"))
 
-            def _start_key(game):
-                value = game.get("status", "")
-                return value if re.match(r"^\d{1,2}:\d{2}$", value) else "99:99"
-
-            first = min(next_day["games"], key=_start_key)
-            aux = "NEXT  %s · %s · 共 %d 场" % (label, first.get("status", "待定"), len(next_day["games"]))
-        else:
-            aux = "NEXT  暂无后续赛程"
-
-    _draw_left_centered(draw, (22, 206, 378, 250), aux, fonts.detail, black, 356)
-
-    draw.line((14, 250, 386, 250), fill=black, width=1)
-
-    news = (data.get("news") or [{}])[0] or {}
-    hot = "热点  %s · %s %s" % (
-        news.get("title", "暂无最新中文资讯"),
-        news.get("source", ""),
-        news.get("age", ""),
-    )
-    _draw_left_centered(draw, (22, 254, 378, 286), hot, fonts.detail, black, 356)
-
-    return image, state
+    return image, {"date": target, "label": label, "count": len(games)}

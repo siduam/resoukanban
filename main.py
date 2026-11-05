@@ -10,7 +10,6 @@ from nba import TZ, collect
 from push import push_images, save_images
 from renderers import (
     load_fonts,
-    load_nba_fonts,
     render_information_page,
     render_nba_page,
     render_weather_dashboard,
@@ -18,21 +17,19 @@ from renderers import (
 
 
 def generate_nba_page(settings: Settings):
-    """生成 NBA 单页看板。数据源异常时退化为“暂无赛程”画面，不抛异常。"""
+    """生成 NBA 赛程页。数据源异常时退化为“暂无赛程”画面，不抛异常。"""
     now = datetime.now(TZ)
     try:
         data = collect(settings, now.date())
     except Exception as exc:  # noqa: BLE001 - 数据源问题不应中断整轮推送
         print(f"警告: NBA 数据获取失败: {exc}")
-        data = {"days": [], "news": []}
+        data = {"days": []}
 
-    image, state = render_nba_page(
-        data,
-        now.date(),
-        load_nba_fonts(settings.font_path),
-        now,
+    image, info = render_nba_page(data, now, settings.font_path)
+    print(
+        "NBA 第 2 页: %s %d月%02d日 · %d 场"
+        % (info["label"], info["date"].month, info["date"].day, info["count"])
     )
-    print(f"NBA 状态: {state['status']}（建议 {state['poll']} 分钟后刷新）")
     return image
 
 

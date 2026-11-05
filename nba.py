@@ -1,4 +1,4 @@
-"""NBA 赛程/赛况数据获取与单页看板状态计算。
+"""NBA 赛程数据获取与缓存。
 
 逻辑移植自 zectrix-nba-board（https://github.com/happynailinzz/zectrix-nba-board）
 的 scripts/nba_board.py，并按本项目的配置方式做了适配：
@@ -10,17 +10,14 @@
 - 缓存放在 ``~/.cache/resoukanban-nba``，可用 ``RESOUKANBAN_NBA_CACHE`` 覆盖，
   目录不可写时自动降级为无缓存。
 
-对外主要接口：``collect()`` 抓数据，``build_state()`` 计算当前状态，
-``renderers.render_nba_page()`` 负责绘制。
+页面渲染在 ``renderers.render_nba_page()``，这里只负责拿数据。
 """
 
 import datetime as dt
-import html
 import json
 import os
 import re
 import time
-from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
@@ -44,13 +41,6 @@ NBA_SCHEDULE = os.environ.get(
     "NBA_SCHEDULE_URL",
     "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2_1.json",
 )
-SINA_FEED = os.environ.get(
-    "NBA_SINA_FEED_URL",
-    "https://interface.sina.cn/sports/pc_sports_caipiao_common_list_api.d.json"
-    "?ename=nba&last_ts=&page=1&size=20",
-)
-SINA_NEWS = "https://sports.sina.com.cn/nba/"
-TENCENT_NEWS = "https://sports.qq.com/nba/"
 
 CACHE_DIR = Path(
     os.environ.get(
@@ -88,107 +78,6 @@ ESPN_CODE_ALIAS = {
     "BRK": "BKN",
     "CHO": "CHA",
 }
-
-_NON_NBA_KEYWORDS = (
-    "网球", "足球", "英超", "西甲", "德甲", "意甲", "欧冠",
-    "棒球", "高尔夫", "赛车", "ATP", "WTA", "F1",
-)
-_NEWS_IGNORED = (
-    "首页", "登录", "注册", "更多", "视频", "图片", "评论", "分享",
-    "排行", "直播", "数据", "资料", "专题", "收藏", "阅读",
-    "意见反馈", "招募", "广告",
-)
-
-
-class NewsParser(HTMLParser):
-    """新浪/腾讯列表页的通用标题抓取（正则失效时的兜底）。"""
-
-    def __init__(self):
-        super().__init__()
-        self.items: List[str] = []
-        self.capture = False
-        self.buffer: List[str] = []
-
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        classes = "%s %s" % (attrs.get("class", ""), attrs.get("id", ""))
-        if tag in {"a", "h1", "h2", "h3", "h4"} and (
-            tag.startswith("h")
-            or "title" in classes.lower()
-            or "news" in classes.lower()
-            or "article" in classes.lower()
-        ):
-            self.capture = True
-            self.buffer = []
-
-    def handle_data(self, data):
-        if self.capture:
-            self.buffer.append(html.unescape(data).strip())
-
-    def handle_endtag(self, tag):
-        if self.capture and tag in {"a", "h1", "h2", "h3", "h4"}:
-            text = re.sub(r"\s+", " ", "".join(self.buffer)).strip()
-            ignored = {"首页", "更多", "登录", "注册", "直播", "赛程", "排名", "数据", "视频"}
-            if 8 <= len(text) <= 80 and text not in ignored and text not in self.items:
-                self.items.append(text)
-            self.capture = False
-
-
-def _zh_count(text: str) -> int:
-    return sum(1 for char in text if "\u4e00" <= char <= "\u9fff")
-
-
-def _regex_news(html_text: str) -> List[str]:
-    """从新浪式列表页里提取带日期路径的中文标题，按 URL 中的日期倒序。"""
-    dated = []
-    undated = []
-    seen = set()
-    for attrs, text in re.findall(r'<a\s+([^>]*href="[^"]+")>([^<{}]{8,60})</a>', html_text):
-        title = html.unescape(text).strip()
-        if _zh_count(title) < 4:
-            continue
-        if any(word in title for word in _NEWS_IGNORED):
-            continue
-        href = re.search(r'href="([^"]*)"', attrs)
-        href = href.group(1) if href else ""
-        if not re.search(r"/doc-|/k/|\d{4}-\d{2}-\d{2}/", href):
-            continue
-        if title in seen:
-            continue
-        seen.add(title)
-        date = re.search(r"(\d{4}-\d{2}-\d{2})", href)
-        (dated if date else undated).append((date.group(1) if date else "", title))
-    dated.sort(key=lambda item: item[0], reverse=True)
-    return [title for _, title in dated + undated]
-
-
-def _parse_listing(html_text: str) -> List[str]:
-    items = _regex_news(html_text)
-    if items:
-        return items
-    parser = NewsParser()
-    parser.feed(html_text)
-    return parser.items
-
-
-def _feed_titles(data: Dict[str, Any]) -> List[str]:
-    """从新浪实时资讯接口提取 NBA 相关中文标题（过滤网球/足球等综合体育条目）。"""
-    if not isinstance(data, dict):
-        return []
-    titles = []
-    seen = set()
-    items = (((data.get("result") or {}).get("data") or {}).get("items")) or []
-    for item in items:
-        title = html.unescape(str(item.get("title") or "")).strip()
-        if _zh_count(title) < 4:
-            continue
-        if any(word in title for word in _NON_NBA_KEYWORDS):
-            continue
-        if title in seen:
-            continue
-        seen.add(title)
-        titles.append(title)
-    return titles
 
 
 def _write_cache(name: str, value: Any) -> None:
@@ -232,18 +121,6 @@ def _safe_fetch(label: str, fetcher, default):
 
 def _cached_json(label, url, cache_name, default, referer=""):
     value = _safe_fetch(label, lambda: _request(url, referer).json(), None)
-    if value is not None:
-        _write_cache(cache_name, value)
-        return value
-    return _read_cache(cache_name, default)
-
-
-def _cached_html(label, url, cache_name, default):
-    value = _safe_fetch(
-        label,
-        lambda: _parse_listing(_request(url).content.decode("utf-8", "ignore")),
-        None,
-    )
     if value is not None:
         _write_cache(cache_name, value)
         return value
@@ -421,119 +298,11 @@ def _collect_official(date: dt.date) -> List[Dict[str, Any]]:
     return days
 
 
-def _collect_news() -> List[Dict[str, str]]:
-    feed = _cached_json(
-        "新浪 NBA 实时资讯",
-        SINA_FEED,
-        "sina-feed.json",
-        {},
-        referer=SINA_NEWS,
-    )
-    titles = _feed_titles(feed)
-    if titles:
-        pool = [{"title": title, "source": "新浪体育", "age": ""} for title in titles]
-    else:
-        # 接口失效时回退到静态列表页（多为旧热文，仅作兜底）。
-        sina = _cached_html("新浪 NBA 新闻", SINA_NEWS, "sina-news.json", [])
-        tencent = _cached_html("腾讯 NBA 新闻", TENCENT_NEWS, "tencent-news.json", [])
-        pool = [{"title": title, "source": "新浪体育", "age": ""} for title in sina]
-        pool += [{"title": title, "source": "腾讯体育", "age": ""} for title in tencent]
-
-    if not pool:
-        return []
-
-    # 用 10 分钟时间桶轮换头条，无需持久化状态；每次真实刷新都会换一条。
-    index = int(dt.datetime.now(TZ).timestamp() // 600) % len(pool)
-    return pool[index:] + pool[:index]
-
-
 def collect(settings: Settings, date: Optional[dt.date] = None) -> Dict[str, Any]:
-    """抓取目标北京日的赛程（昨天/今天/明天/后天）与中文热点。"""
+    """抓取目标北京日的赛程（昨天/今天/明天/后天）。"""
     date = date or dt.datetime.now(TZ).date()
     if getattr(settings, "nba_score_source", "espn") == "official":
         days = _collect_official(date)
     else:
         days = _collect_espn(date)
-    return {"days": days, "news": _collect_news()}
-
-
-def minutes_to_start(game: Dict[str, Any], now: dt.datetime) -> int:
-    try:
-        start = dt.datetime.fromisoformat(
-            str(game["start"]).replace("Z", "+00:00")
-        ).astimezone(TZ)
-        return int((start - now).total_seconds() / 60)
-    except (KeyError, ValueError, TypeError):
-        return 99999
-
-
-def select_focus(games: List[Dict[str, Any]], mode: str, now: dt.datetime) -> Dict[str, Any]:
-    if mode == "live":
-        return sorted(games, key=lambda item: minutes_to_start(item, now), reverse=True)[0]
-    return sorted(games, key=lambda item: abs(minutes_to_start(item, now)))[0]
-
-
-def build_state(data: Dict[str, Any], date: dt.date, now: dt.datetime) -> Dict[str, Any]:
-    """按 LIVE → NEXT → FINAL → REST 的优先级计算单页主卡状态。"""
-    days = data.get("days") or []
-    today = next(
-        (item for item in days if item["date"] == date.isoformat()),
-        {"games": []},
-    )
-    future = [
-        game
-        for item in days
-        if item["date"] > date.isoformat()
-        for game in item.get("games", [])
-        if game["state"] == "scheduled"
-    ]
-    live = [game for game in today.get("games", []) if game["state"] == "live"]
-    scheduled = [game for game in today.get("games", []) if game["state"] == "scheduled"]
-    final = [game for game in today.get("games", []) if game["state"] == "final"]
-
-    if live:
-        status = "LIVE"
-        focus = select_focus(live, "live", now)
-        poll = 10
-    elif scheduled:
-        status = "NEXT"
-        focus = select_focus(scheduled, "next", now)
-        poll = 10 if minutes_to_start(focus, now) <= 120 else 60
-    elif final:
-        status = "FINAL"
-        focus = select_focus(final, "final", now)
-        poll = 120
-    else:
-        status = "REST"
-        yesterday = next(
-            (item for item in days if item["date"] < date.isoformat()),
-            {"games": []},
-        )
-        previous = [game for game in yesterday.get("games", []) if game["state"] == "final"]
-        focus = previous[-1] if previous else None
-        poll = 720
-
-    recent_finals = final
-    recent_date = date
-    if status == "REST":
-        recent_finals = []
-        for day in sorted(
-            (item for item in days if item["date"] < date.isoformat()),
-            key=lambda item: item["date"],
-            reverse=True,
-        ):
-            candidates = [game for game in day.get("games", []) if game["state"] == "final"]
-            if candidates:
-                recent_finals = candidates
-                recent_date = dt.date.fromisoformat(day["date"])
-                break
-
-    return {
-        "status": status,
-        "focus": focus,
-        "today": today.get("games", []),
-        "future": future,
-        "poll": poll,
-        "recent_finals": recent_finals[:3],
-        "recent_date": recent_date,
-    }
+    return {"days": days}
