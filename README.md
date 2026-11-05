@@ -102,6 +102,30 @@ PAGE_SOURCES = {
 
 > **关于刷新频率**：本项目的 GitHub Actions 设置为每 2 小时运行一次，但 GitHub 的定时任务在高峰期经常延迟，实际间隔可能超过 2 小时。每次运行会打印 `NBA 状态: LIVE（建议 10 分钟后刷新）`，方便判断画面新鲜度。如果想在直播期间更及时，可以另建一个每 10 分钟触发、只生成第 2 页的 workflow（命令为 `python main.py --pages 2`），或在 Actions 页面手动 `Run workflow`。同时记得把设备的同步周期调到 10 分钟（极趣云支持 10/30/60/180/720 分钟），否则推送再频繁屏幕也不会刷新。
 
+### 外部定时触发（可选）
+
+GitHub 自带的 `schedule` 是尽力而为的队列，高峰时可能延迟数小时甚至跳过。如果想在第 2 页获得更稳定的刷新，可以用外部定时器调用 `workflow_dispatch`，只刷新第 2 页：
+
+1. 新建一个 **fine-grained token**（Settings → Developer settings → Personal access tokens → Fine-grained tokens），只授权 `siduam/resoukanban`，权限只勾 **Actions: Read and write**。这个 token 只用于触发，不要用于推送代码。
+2. 手动验证（返回 `HTTP/2 204` 即成功）：
+   ```bash
+   curl -i -X POST \
+     -H "Authorization: Bearer github_pat_xxx" \
+     -H "Accept: application/vnd.github+json" \
+     -H "X-GitHub-Api-Version: 2022-11-28" \
+     https://api.github.com/repos/siduam/resoukanban/actions/workflows/run.yml/dispatches \
+     -d '{"ref":"main","inputs":{"pages":"2"}}'
+   ```
+3. 在 [cron-job.org](https://cron-job.org) 新建任务：
+   - URL：上面的接口地址
+   - 方法：`POST`
+   - 间隔：15 或 30 分钟（试运行建议先 30 分钟）
+   - Headers：`Authorization: Bearer github_pat_xxx`、`Accept: application/vnd.github+json`、`X-GitHub-Api-Version: 2022-11-28`、`Content-Type: application/json`
+   - Body：`{"ref":"main","inputs":{"pages":"2"}}`
+4. 触发后去 Actions 页面确认：事件是 `workflow_dispatch`，日志里出现 `本次推送页面: 2`，并且只推送了 Page 2。
+
+外部定时器只负责“敲门”，真正的抓取和推送仍由 GitHub Actions 完成；原来的每 2 小时定时任务继续刷新全部页面，两者互不影响。
+
 ### 本地预览（推荐）
 
 修改布局或增加页面时，可以先在本地生成图片，不推送到真实设备：

@@ -5,10 +5,20 @@ on:
     - cron: '37 */1 * * *'
       timezone: Asia/Shanghai
   workflow_dispatch:
+    inputs:
+      pages:
+        description: '要推送的页面，逗号分隔；外部定时器传 2 可只刷新 NBA 页'
+        required: false
+        default: '1,2,3,4'
+
+concurrency:
+  group: kanban-push
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: 获取代码
         uses: actions/checkout@v6
@@ -30,4 +40,7 @@ jobs:
           ZECTRIX_MAC: ${{ secrets.ZECTRIX_MAC }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CAIYUN_API_TOKEN: ${{ secrets.CAIYUN_API_TOKEN }}
-        run: python main.py
+          PAGES: ${{ inputs.pages || '1,2,3,4' }}
+        run: |
+          echo "本次推送页面: $PAGES"
+          python main.py --pages "$PAGES"
