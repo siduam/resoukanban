@@ -5,8 +5,9 @@ from typing import Dict, FrozenSet, Mapping, Tuple
 
 
 # 用户自定义区 
-ENABLED_PAGES = "1,2,3,4"
-# 第 1、3 页为信息页；第 2 页固定为 NBA 看板；第 4 页固定为彩云天气。
+ENABLED_PAGES = "1,2,3"
+# 第 1、3 页为信息页；第 2 页固定为 NBA 看板。
+# 第 4 页天气默认停用（代码保留）；如需恢复，把 4 加进 ENABLED_PAGES。
 PAGE_SOURCES = {
     1: {"source": "github", "title": "GitHub 热门"},
     #1: {"source": "bilibili", "title": "B站热搜"},

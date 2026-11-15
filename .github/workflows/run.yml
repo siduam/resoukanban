@@ -9,7 +9,7 @@ on:
       pages:
         description: '要推送的页面，逗号分隔；外部定时器传 2 可只刷新 NBA 页'
         required: false
-        default: '1,2,3,4'
+        default: '1,2,3'
 
 concurrency:
   group: kanban-push
@@ -40,7 +40,7 @@ jobs:
           ZECTRIX_MAC: ${{ secrets.ZECTRIX_MAC }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CAIYUN_API_TOKEN: ${{ secrets.CAIYUN_API_TOKEN }}
-          PAGES: ${{ inputs.pages || '1,2,3,4' }}
+          PAGES: ${{ inputs.pages || '1,2,3' }}
         run: |
           echo "本次推送页面: $PAGES"
           python main.py --pages "$PAGES"
